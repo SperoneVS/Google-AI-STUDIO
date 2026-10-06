@@ -1,0 +1,6 @@
+{
+  "name": "CampHaven",
+  "description": "Discover and filter campsites by sleeping setup, clean water access, and energy hookups.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

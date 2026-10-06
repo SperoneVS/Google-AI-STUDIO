@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Mountain Background Peak inside circle -->
+    <path
+        android:fillColor="#4D6EB898"
+        android:pathData="M32,68 L54,34 L76,68 Z" />
+    <path
+        android:fillColor="#7096D2B7"
+        android:pathData="M48,68 L64,44 L80,68 Z" />
+
+    <!-- Camping Tent (Sleep) -->
+    <path
+        android:fillColor="#E8F5E9"
+        android:pathData="M34,70 L54,38 L74,70 Z" />
+    <!-- Tent Inner Shadow / Entrance -->
+    <path
+        android:fillColor="#FFB300"
+        android:pathData="M48,70 L54,52 L60,70 Z" />
+    <path
+        android:fillColor="#E65100"
+        android:pathData="M52,70 L54,58 L56,70 Z" />
+
+    <!-- Water droplet on left badge (Water) -->
+    <path
+        android:fillColor="#29B6F6"
+        android:pathData="M30,50 C30,46 35,40 35,40 C35,40 40,46 40,50 C40,53 37.8,55 35,55 C32.2,55 30,53 30,50 Z" />
+
+    <!-- Energy spark on right badge (Energy) -->
+    <path
+        android:fillColor="#FFD54F"
+        android:pathData="M73,38 L68,48 L73,48 L69,57 L78,46 L73,46 Z" />
+
+    <!-- Ground line -->
+    <path
+        android:strokeColor="#A5D6A7"
+        android:strokeWidth="2.5"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000"
+        android:pathData="M24,72 L84,72" />
+</vector>
