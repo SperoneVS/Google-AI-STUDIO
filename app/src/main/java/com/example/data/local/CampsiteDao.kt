@@ -41,6 +41,9 @@ interface CampsiteDao {
     @Query("SELECT * FROM gear_checklist")
     fun getAllGearItems(): Flow<List<GearEntity>>
 
+    @Query("SELECT * FROM gear_checklist WHERE id = :id LIMIT 1")
+    suspend fun getGearItem(id: String): GearEntity?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertGearItem(item: GearEntity)
 
@@ -49,6 +52,9 @@ interface CampsiteDao {
 
     @Query("UPDATE gear_checklist SET isChecked = :isChecked WHERE id = :id")
     suspend fun updateGearChecked(id: String, isChecked: Boolean)
+
+    @Query("DELETE FROM gear_checklist WHERE id = :id")
+    suspend fun deleteGearItem(id: String)
 
     @Query("SELECT * FROM campsite_reviews WHERE campsite_id = :campsiteId ORDER BY created_at_timestamp DESC")
     fun getReviewsForCampsite(campsiteId: String): Flow<List<CampsiteReviewEntity>>

@@ -31,10 +31,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.Campsite
+import com.example.data.model.UnitSystem
 import com.example.ui.components.CampsiteCard
 import com.example.ui.viewmodel.*
 import com.example.util.GoogleMapsHelper
 import com.example.util.LocationTracker
+import com.example.util.Park4NightHelper
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -46,10 +48,14 @@ fun ExploreScreen(
     val filterState by viewModel.filterState.collectAsState()
     val campsites by viewModel.filteredCampsites.collectAsState()
     val userCoords by viewModel.userCoordinates.collectAsState()
+    val lastSyncInfo by viewModel.lastSyncInfo.collectAsState()
+    val unitSystem by viewModel.unitSystem.collectAsState()
+    val showUnitPrompt by viewModel.showUnitPrompt.collectAsState()
 
     var showSortMenu by remember { mutableStateOf(false) }
     var showAreaMenu by remember { mutableStateOf(false) }
     var isLocating by remember { mutableStateOf(false) }
+    var isSyncing by remember { mutableStateOf(false) }
 
     // GPS Permission launcher for Auto-Find
     val locationLauncher = rememberLauncherForActivityResult(
@@ -63,16 +69,16 @@ fun ExploreScreen(
                 context = context,
                 onSuccess = { lat, lon ->
                     isLocating = false
-                    viewModel.triggerAutoFindInArea(lat, lon, "Your GPS Area")
-                    Toast.makeText(context, "Auto-found camping in your area!", Toast.LENGTH_SHORT).show()
+                    viewModel.triggerAutoFindInArea(lat, lon, "Your GPS Location")
+                    Toast.makeText(context, "Location updated: campsites nearby loaded!", Toast.LENGTH_SHORT).show()
                 },
                 onFailure = { err ->
                     isLocating = false
-                    Toast.makeText(context, err, Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, "$err Defaulting to Europe Hub.", Toast.LENGTH_SHORT).show()
                 }
             )
         } else {
-            Toast.makeText(context, "Location permission needed to auto-find in your area.", Toast.LENGTH_LONG).show()
+            Toast.makeText(context, "Location permission not granted. You can pick European regions in 'Change Area'.", Toast.LENGTH_LONG).show()
         }
     }
 
@@ -83,12 +89,12 @@ fun ExploreScreen(
                 context = context,
                 onSuccess = { lat, lon ->
                     isLocating = false
-                    viewModel.triggerAutoFindInArea(lat, lon, "Your GPS Area")
-                    Toast.makeText(context, "Found campsites near your location!", Toast.LENGTH_SHORT).show()
+                    viewModel.triggerAutoFindInArea(lat, lon, "Your GPS Location")
+                    Toast.makeText(context, "Loaded campsites near your position!", Toast.LENGTH_SHORT).show()
                 },
                 onFailure = { err ->
                     isLocating = false
-                    Toast.makeText(context, err, Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, "$err Showing European camping hub.", Toast.LENGTH_SHORT).show()
                 }
             )
         } else {
@@ -123,14 +129,29 @@ fun ExploreScreen(
                         }
                         Spacer(modifier = Modifier.width(10.dp))
                         Column {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = "CampHaven",
+                                    fontSize = 19.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Surface(
+                                    shape = RoundedCornerShape(6.dp),
+                                    color = MaterialTheme.colorScheme.secondaryContainer
+                                ) {
+                                    Text(
+                                        text = "Made by Victor",
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    )
+                                }
+                            }
                             Text(
-                                text = "CampHaven",
-                                fontSize = 19.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Text(
-                                text = "Sleep • Water • Energy Essentials",
+                                text = "European & Global Campsite Finder",
                                 fontSize = 11.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -138,6 +159,22 @@ fun ExploreScreen(
                     }
                 },
                 actions = {
+                    // Unit selector chip toggle
+                    TextButton(
+                        onClick = {
+                            val next = if (unitSystem == UnitSystem.METRIC) UnitSystem.IMPERIAL else UnitSystem.METRIC
+                            viewModel.setUnitSystem(next)
+                            Toast.makeText(context, "Units: ${next.label}", Toast.LENGTH_SHORT).show()
+                        },
+                        modifier = Modifier.testTag("unit_toggle_btn")
+                    ) {
+                        Text(
+                            text = "${unitSystem.flag} ${if (unitSystem == UnitSystem.METRIC) "Metric" else "Imperial"}",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
                     // Radar Map button
                     IconButton(
                         onClick = { viewModel.navigateTo(ScreenDestination.RadarMap) },
@@ -162,7 +199,7 @@ fun ExploreScreen(
                         )
                     }
 
-                    // Profile / Account button
+                    // Profile button
                     val user by viewModel.currentUser.collectAsState()
                     IconButton(
                         onClick = { viewModel.navigateTo(ScreenDestination.Profile) },
@@ -174,7 +211,7 @@ fun ExploreScreen(
                             modifier = Modifier.size(32.dp)
                         ) {
                             Box(contentAlignment = Alignment.Center) {
-                                val initial = user?.displayName?.firstOrNull()?.uppercase() ?: "C"
+                                val initial = user?.displayName?.firstOrNull()?.uppercase() ?: "V"
                                 Text(
                                     text = initial,
                                     fontSize = 13.sp,
@@ -214,7 +251,7 @@ fun ExploreScreen(
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 4.dp)
                     .testTag("search_input"),
-                placeholder = { Text("Search park, river, power hookup, tent...") },
+                placeholder = { Text("Search France, Italy, Dolomites, Black Forest, pitch...") },
                 leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Search") },
                 trailingIcon = {
                     if (filterState.query.isNotEmpty()) {
@@ -231,7 +268,7 @@ fun ExploreScreen(
                 )
             )
 
-            // AUTO-FIND IN AREA & GOOGLE MAPS ACTION CARD
+            // EUROPEAN AREA & GOOGLE MAPS CONTROLLER CARD
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -249,27 +286,27 @@ fun ExploreScreen(
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(
-                                imageVector = Icons.Default.MyLocation,
+                                imageVector = Icons.Default.Place,
                                 contentDescription = null,
                                 tint = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.size(18.dp)
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = "Area: ${filterState.areaLabel}",
+                                text = "Region: ${filterState.areaLabel}",
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                         }
 
-                        // Area Switcher button
+                        // Region Selector Dropdown
                         Box {
                             TextButton(
                                 onClick = { showAreaMenu = true },
                                 modifier = Modifier.testTag("change_area_btn")
                             ) {
-                                Text("Change Area", fontSize = 11.sp)
+                                Text("Change Region", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                 Icon(Icons.Default.ArrowDropDown, contentDescription = null, modifier = Modifier.size(16.dp))
                             }
 
@@ -278,38 +315,82 @@ fun ExploreScreen(
                                 onDismissRequest = { showAreaMenu = false }
                             ) {
                                 DropdownMenuItem(
-                                    text = { Text("📍 Live Device GPS") },
+                                    text = { Text("📍 Use My Live GPS Location") },
                                     onClick = {
                                         showAreaMenu = false
                                         triggerGpsAutoFind()
                                     }
                                 )
+                                Divider()
                                 DropdownMenuItem(
-                                    text = { Text("🌲 Sierra Nevada (Yosemite)") },
+                                    text = { Text("🇪🇺 All Europe (Central Alps Hub)") },
                                     onClick = {
                                         showAreaMenu = false
-                                        viewModel.setUserLocation(37.8651, -119.5383, "High Sierra")
+                                        viewModel.setUserLocation(46.5197, 9.9534, "🇪🇺 Central Alps")
                                     }
                                 )
                                 DropdownMenuItem(
-                                    text = { Text("🌧️ Pacific Northwest (Olympic)") },
+                                    text = { Text("🇫🇷 France (Chamonix, Provence, Pilat)") },
                                     onClick = {
                                         showAreaMenu = false
-                                        viewModel.setUserLocation(47.8021, -123.6044, "Pacific Northwest")
+                                        viewModel.setUserLocation(45.9237, 6.8694, "🇫🇷 France (Mont Blanc)")
                                     }
                                 )
                                 DropdownMenuItem(
-                                    text = { Text("🏜️ Red Rock Deserts (Moab / Zion)") },
+                                    text = { Text("🇮🇹 Italy (Dolomites, Garda, Sardinia)") },
                                     onClick = {
                                         showAreaMenu = false
-                                        viewModel.setUserLocation(38.5733, -109.5498, "Red Rock Canyonlands")
+                                        viewModel.setUserLocation(46.4302, 11.6983, "🇮🇹 Italy (Dolomites)")
                                     }
                                 )
                                 DropdownMenuItem(
-                                    text = { Text("🏔️ Rocky Mountains (Colorado)") },
+                                    text = { Text("🇩🇪 Germany (Black Forest & Bavaria)") },
                                     onClick = {
                                         showAreaMenu = false
-                                        viewModel.setUserLocation(40.3428, -105.6836, "Rocky Mountains")
+                                        viewModel.setUserLocation(47.8542, 7.7125, "🇩🇪 Germany (Black Forest)")
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("🇨🇭 Switzerland (Lauterbrunnen & Valais)") },
+                                    onClick = {
+                                        showAreaMenu = false
+                                        viewModel.setUserLocation(46.5937, 7.9078, "🇨🇭 Switzerland")
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("🇪🇸 Spain (Pyrenees & Andalusia)") },
+                                    onClick = {
+                                        showAreaMenu = false
+                                        viewModel.setUserLocation(42.6642, 0.1236, "🇪🇸 Spain (Pyrenees)")
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("🇦🇹 Austria (Salzburg & Tyrol)") },
+                                    onClick = {
+                                        showAreaMenu = false
+                                        viewModel.setUserLocation(47.5750, 12.7083, "🇦🇹 Austria")
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("🇳🇴 Norway (Geirangerfjord & Lofoten)") },
+                                    onClick = {
+                                        showAreaMenu = false
+                                        viewModel.setUserLocation(62.1015, 7.2065, "🇳🇴 Norway")
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("🇵🇹 Portugal (Algarve Coast)") },
+                                    onClick = {
+                                        showAreaMenu = false
+                                        viewModel.setUserLocation(37.0658, -8.8242, "🇵🇹 Portugal")
+                                    }
+                                )
+                                Divider()
+                                DropdownMenuItem(
+                                    text = { Text("🇺🇸 USA (High Sierra & Pacific NW)") },
+                                    onClick = {
+                                        showAreaMenu = false
+                                        viewModel.setUserLocation(37.8651, -119.5383, "🇺🇸 California Sierra")
                                     }
                                 )
                             }
@@ -322,7 +403,7 @@ fun ExploreScreen(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        // 1. Auto-Find in Area Button
+                        // 1. Auto-Find Near Me Button
                         Button(
                             onClick = { triggerGpsAutoFind() },
                             modifier = Modifier
@@ -349,14 +430,14 @@ fun ExploreScreen(
                             }
                         }
 
-                        // 2. Open Google Maps Camping Search
+                        // 2. Open Google Maps Search
                         OutlinedButton(
                             onClick = {
                                 GoogleMapsHelper.searchNearbyCampingOnGoogleMaps(
                                     context = context,
                                     latitude = userCoords.first,
                                     longitude = userCoords.second,
-                                    filterTerm = "camping campsites with water and electricity"
+                                    filterTerm = "camping campsites campervan water electricity"
                                 )
                             },
                             modifier = Modifier
@@ -374,7 +455,7 @@ fun ExploreScreen(
                         }
                     }
 
-                    // Radius Filter Chips (Nearby distance range)
+                    // Quick Radius Filter Chips
                     Spacer(modifier = Modifier.height(6.dp))
                     Row(
                         modifier = Modifier
@@ -385,13 +466,25 @@ fun ExploreScreen(
                     ) {
                         Text("Radius:", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
 
-                        listOf(
-                            null to "All Range",
-                            25.0 to "< 25 mi",
-                            50.0 to "< 50 mi",
-                            100.0 to "< 100 mi",
-                            250.0 to "< 250 mi"
-                        ).forEach { (dist, label) ->
+                        val radiusOptions = if (unitSystem == UnitSystem.METRIC) {
+                            listOf(
+                                null to "All Range",
+                                31.0 to "< 50 km",
+                                62.0 to "< 100 km",
+                                155.0 to "< 250 km",
+                                310.0 to "< 500 km"
+                            )
+                        } else {
+                            listOf(
+                                null to "All Range",
+                                25.0 to "< 25 mi",
+                                50.0 to "< 50 mi",
+                                100.0 to "< 100 mi",
+                                250.0 to "< 250 mi"
+                            )
+                        }
+
+                        radiusOptions.forEach { (dist, label) ->
                             FilterChip(
                                 selected = filterState.maxDistanceMiles == dist,
                                 onClick = { viewModel.setMaxDistanceMiles(dist) },
@@ -399,6 +492,52 @@ fun ExploreScreen(
                                 modifier = Modifier.height(30.dp)
                             )
                         }
+                    }
+                }
+            }
+
+            // CLOUD SYNC BAR
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 2.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.CloudDone,
+                        contentDescription = null,
+                        tint = Color(0xFF2E7D32),
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = lastSyncInfo,
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                IconButton(
+                    onClick = {
+                        isSyncing = true
+                        viewModel.manualSyncCloudData { success ->
+                            isSyncing = false
+                            Toast.makeText(context, if (success) "Campsites synced!" else "Sync completed", Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    modifier = Modifier.size(24.dp)
+                ) {
+                    if (isSyncing) {
+                        CircularProgressIndicator(modifier = Modifier.size(12.dp), strokeWidth = 2.dp)
+                    } else {
+                        Icon(
+                            imageVector = Icons.Default.Refresh,
+                            contentDescription = "Sync Cloud",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(15.dp)
+                        )
                     }
                 }
             }
@@ -414,7 +553,7 @@ fun ExploreScreen(
                 Tab(
                     selected = filterState.pillar == ActivePillarFilter.ALL,
                     onClick = { viewModel.setPillar(ActivePillarFilter.ALL) },
-                    text = { Text("All Sites") },
+                    text = { Text("All Sites (${campsites.size})") },
                     icon = { Icon(Icons.Default.Forest, contentDescription = null, modifier = Modifier.size(18.dp)) }
                 )
                 Tab(
@@ -426,42 +565,78 @@ fun ExploreScreen(
                 Tab(
                     selected = filterState.pillar == ActivePillarFilter.WATER,
                     onClick = { viewModel.setPillar(ActivePillarFilter.WATER) },
-                    text = { Text("💧 Water Focus") },
+                    text = { Text("💧 Water Verified") },
                     icon = { Icon(Icons.Default.WaterDrop, contentDescription = null, modifier = Modifier.size(18.dp)) }
                 )
                 Tab(
                     selected = filterState.pillar == ActivePillarFilter.ENERGY,
                     onClick = { viewModel.setPillar(ActivePillarFilter.ENERGY) },
-                    text = { Text("⚡ Energy Focus") },
+                    text = { Text("⚡ Shore / Solar") },
                     icon = { Icon(Icons.Default.Bolt, contentDescription = null, modifier = Modifier.size(18.dp)) }
                 )
                 Tab(
                     selected = filterState.pillar == ActivePillarFilter.SAVED,
                     onClick = { viewModel.setPillar(ActivePillarFilter.SAVED) },
-                    text = { Text("⭐ Saved") },
+                    text = { Text("⭐ Bookmarked") },
                     icon = { Icon(Icons.Default.Bookmark, contentDescription = null, modifier = Modifier.size(18.dp)) }
                 )
             }
 
-            // Secondary Quick Filter Chips & Sort
+            // Quick Filter Chips Row (Including Park4night)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState())
-                    .padding(horizontal = 16.dp, vertical = 4.dp),
+                    .padding(horizontal = 16.dp, vertical = 4.dp)
+                    .horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Sort Menu Trigger
+                // Park4night toggle
+                FilterChip(
+                    selected = filterState.park4NightOnly,
+                    onClick = { viewModel.togglePark4NightOnly() },
+                    label = { Text("🌲 Park4night Spots") },
+                    leadingIcon = {
+                        if (filterState.park4NightOnly) {
+                            Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(14.dp))
+                        }
+                    }
+                )
+
+                FilterChip(
+                    selected = filterState.sleepType == com.example.data.model.SleepType.CAMPERVAN,
+                    onClick = {
+                        viewModel.setSleepType(
+                            if (filterState.sleepType == com.example.data.model.SleepType.CAMPERVAN) null else com.example.data.model.SleepType.CAMPERVAN
+                        )
+                    },
+                    label = { Text("🚐 Campervan / RV") }
+                )
+
+                FilterChip(
+                    selected = filterState.potableOnly,
+                    onClick = { viewModel.togglePotableOnly() },
+                    label = { Text("Potable Tap") }
+                )
+
+                FilterChip(
+                    selected = filterState.electricHookupOnly,
+                    onClick = { viewModel.toggleElectricHookupOnly() },
+                    label = { Text("16A / 30A Hookup") }
+                )
+
+                FilterChip(
+                    selected = filterState.showersRequired,
+                    onClick = { viewModel.toggleShowersRequired() },
+                    label = { Text("Hot Showers") }
+                )
+
+                // Sort Chip
                 Box {
                     AssistChip(
                         onClick = { showSortMenu = true },
-                        label = { Text(filterState.sortOption.label) },
-                        leadingIcon = { Icon(Icons.Default.Sort, contentDescription = null, modifier = Modifier.size(16.dp)) },
-                        colors = AssistChipDefaults.assistChipColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
-                        ),
-                        modifier = Modifier.testTag("sort_menu_chip")
+                        label = { Text("Sort: ${filterState.sortOption.label}") },
+                        leadingIcon = { Icon(Icons.Default.Sort, contentDescription = null, modifier = Modifier.size(14.dp)) }
                     )
 
                     DropdownMenu(
@@ -474,109 +649,44 @@ fun ExploreScreen(
                                 onClick = {
                                     viewModel.setSortOption(option)
                                     showSortMenu = false
-                                },
-                                leadingIcon = {
-                                    if (filterState.sortOption == option) {
-                                        Icon(Icons.Default.Check, contentDescription = null)
-                                    }
                                 }
                             )
                         }
                     }
                 }
-
-                FilterChip(
-                    selected = filterState.potableOnly,
-                    onClick = { viewModel.togglePotableOnly() },
-                    label = { Text("Potable Water") },
-                    leadingIcon = { Icon(Icons.Default.Water, contentDescription = null, modifier = Modifier.size(14.dp)) }
-                )
-
-                FilterChip(
-                    selected = filterState.showersRequired,
-                    onClick = { viewModel.toggleShowersRequired() },
-                    label = { Text("Showers") },
-                    leadingIcon = { Icon(Icons.Default.Shower, contentDescription = null, modifier = Modifier.size(14.dp)) }
-                )
-
-                FilterChip(
-                    selected = filterState.electricHookupOnly,
-                    onClick = { viewModel.toggleElectricHookupOnly() },
-                    label = { Text("Electric Hookups") },
-                    leadingIcon = { Icon(Icons.Default.Power, contentDescription = null, modifier = Modifier.size(14.dp)) }
-                )
-
-                FilterChip(
-                    selected = filterState.solarHighExposureOnly,
-                    onClick = { viewModel.toggleSolarOnly() },
-                    label = { Text("Solar Prime") },
-                    leadingIcon = { Icon(Icons.Default.WbSunny, contentDescription = null, modifier = Modifier.size(14.dp)) }
-                )
             }
 
-            // Main List or Empty State
+            // Campsites List
             if (campsites.isEmpty()) {
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(24.dp),
+                        .padding(32.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center
-                    ) {
-                        Surface(
-                            shape = CircleShape,
-                            color = MaterialTheme.colorScheme.surfaceVariant,
-                            modifier = Modifier.size(68.dp)
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(
-                                    imageVector = Icons.Default.SearchOff,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.size(34.dp)
-                                )
-                            }
-                        }
-                        Spacer(modifier = Modifier.height(14.dp))
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(
+                            imageVector = Icons.Default.ExploreOff,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f),
+                            modifier = Modifier.size(64.dp)
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
                         Text(
-                            text = "No campsites in current radius filter",
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.SemiBold,
+                            text = "No campsites match your filters",
+                            fontSize = 17.sp,
+                            fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
-                            text = "Expand your radius or search directly on Google Maps",
+                            text = "Try clearing filters or switching to '🇪🇺 All Europe'.",
                             fontSize = 13.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Spacer(modifier = Modifier.height(16.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Button(
-                                onClick = {
-                                    viewModel.setMaxDistanceMiles(null)
-                                    viewModel.setQuery("")
-                                }
-                            ) {
-                                Text("Expand Radius")
-                            }
-
-                            OutlinedButton(
-                                onClick = {
-                                    GoogleMapsHelper.searchNearbyCampingOnGoogleMaps(
-                                        context,
-                                        userCoords.first,
-                                        userCoords.second
-                                    )
-                                }
-                            ) {
-                                Icon(Icons.Default.Map, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("Search Google Maps")
-                            }
+                        Button(onClick = { viewModel.resetFilters() }) {
+                            Text("Reset All Filters")
                         }
                     }
                 }
@@ -587,10 +697,13 @@ fun ExploreScreen(
                     verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
                     items(items = campsites, key = { it.id }) { site ->
-                        val distance = viewModel.getDistanceToSiteMiles(site)
+                        val formattedDist = viewModel.getFormattedDistanceToSite(site)
+                        val formattedElev = unitSystem.formatElevation(site.sleep.elevationFt)
+
                         CampsiteCard(
                             campsite = site,
-                            distanceMiles = distance,
+                            formattedDistance = formattedDist,
+                            formattedElevation = formattedElev,
                             onClick = { viewModel.navigateTo(ScreenDestination.Detail(site.id)) },
                             onToggleBookmark = { viewModel.toggleBookmark(site) },
                             onOpenGoogleMaps = {
@@ -600,11 +713,72 @@ fun ExploreScreen(
                                     longitude = site.longitude,
                                     campsiteName = site.name
                                 )
+                            },
+                            onOpenPark4Night = {
+                                Park4NightHelper.openSpotInPark4Night(
+                                    context = context,
+                                    latitude = site.latitude,
+                                    longitude = site.longitude,
+                                    spotName = site.name
+                                )
                             }
                         )
+                    }
+
+                    item {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 16.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "CampHaven • Made by Victor",
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
                     }
                 }
             }
         }
+    }
+
+    // First-launch Unit Prompt: Ask for European or American metrics
+    if (showUnitPrompt) {
+        AlertDialog(
+            onDismissRequest = { viewModel.dismissUnitPrompt() },
+            icon = { Icon(Icons.Default.Straighten, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
+            title = { Text("Choose Metric System", fontWeight = FontWeight.Bold) },
+            text = {
+                Column {
+                    Text(
+                        text = "Would you like European Metric or American Imperial units for distances, elevations, and vehicle measurements?",
+                        fontSize = 14.sp
+                    )
+                    Spacer(modifier = Modifier.height(14.dp))
+                    Text(
+                        text = "🇪🇺 European Metric: Kilometers (km), Meters (m), Kilograms (kg)\n🇺🇸 American Imperial: Miles (mi), Feet (ft), Pounds (lbs)",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = { viewModel.setUnitSystem(UnitSystem.METRIC) }
+                ) {
+                    Text("🇪🇺 European Metric (km / m)")
+                }
+            },
+            dismissButton = {
+                OutlinedButton(
+                    onClick = { viewModel.setUnitSystem(UnitSystem.IMPERIAL) }
+                ) {
+                    Text("🇺🇸 American Imperial (mi / ft)")
+                }
+            }
+        )
     }
 }

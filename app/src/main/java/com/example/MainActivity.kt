@@ -51,6 +51,7 @@ class MainActivity : ComponentActivity() {
                 }
 
                 LaunchedEffect(Unit) {
+                    viewModel.trySilentSignIn(this@MainActivity)
                     val fineCheck = ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.ACCESS_FINE_LOCATION)
                     if (fineCheck != PackageManager.PERMISSION_GRANTED) {
                         locationPermissionLauncher.launch(

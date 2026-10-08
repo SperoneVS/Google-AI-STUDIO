@@ -18,21 +18,25 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
 import com.example.data.model.*
 import com.example.ui.theme.*
 
 @Composable
 fun CampsiteCard(
     campsite: Campsite,
-    distanceMiles: Double,
+    formattedDistance: String,
+    formattedElevation: String,
     onClick: () -> Unit,
     onToggleBookmark: () -> Unit,
     onOpenGoogleMaps: (() -> Unit)? = null,
+    onOpenPark4Night: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     Card(
@@ -47,34 +51,64 @@ fun CampsiteCard(
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
-            // Header Header Banner with Terrain Styling
+            // Header Image Banner with Real Photo / Scrim
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(96.dp)
-                    .background(
-                        brush = Brush.horizontalGradient(
-                            colors = when (campsite.terrainType) {
-                                "Alpine Forest" -> listOf(Color(0xFF1B4332), Color(0xFF2D6A4F))
-                                "Rainforest Riverbank" -> listOf(Color(0xFF0F3B3E), Color(0xFF186F65))
-                                "Desert Canyon" -> listOf(Color(0xFF8D4004), Color(0xFFB85D19))
-                                "Glacial Valley" -> listOf(Color(0xFF1A365D), Color(0xFF2B6CB0))
-                                "Alpine Lake" -> listOf(Color(0xFF0B525B), Color(0xFF14746F))
-                                "Coastal Cliffs" -> listOf(Color(0xFF1D3557), Color(0xFF457B9D))
-                                else -> listOf(Color(0xFF2D3748), Color(0xFF4A5568))
-                            }
-                        )
-                    )
-                    .padding(14.dp)
+                    .height(130.dp)
             ) {
-                // Terrain Tag & Elevation
+                if (campsite.photoUrl.isNotBlank()) {
+                    AsyncImage(
+                        model = campsite.photoUrl,
+                        contentDescription = campsite.name,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                    // Gradient scrim for contrast
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(
+                                Brush.verticalGradient(
+                                    colors = listOf(
+                                        Color.Black.copy(alpha = 0.55f),
+                                        Color.Black.copy(alpha = 0.2f),
+                                        Color.Black.copy(alpha = 0.85f)
+                                    )
+                                )
+                            )
+                    )
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(
+                                brush = Brush.horizontalGradient(
+                                    colors = when (campsite.terrainType) {
+                                        "Alpine Forest" -> listOf(Color(0xFF1B4332), Color(0xFF2D6A4F))
+                                        "Rainforest Riverbank" -> listOf(Color(0xFF0F3B3E), Color(0xFF186F65))
+                                        "Desert Canyon" -> listOf(Color(0xFF8D4004), Color(0xFFB85D19))
+                                        "Glacial Valley" -> listOf(Color(0xFF1A365D), Color(0xFF2B6CB0))
+                                        "Alpine Lake" -> listOf(Color(0xFF0B525B), Color(0xFF14746F))
+                                        "Coastal Cliffs" -> listOf(Color(0xFF1D3557), Color(0xFF457B9D))
+                                        else -> listOf(Color(0xFF2D3748), Color(0xFF4A5568))
+                                    }
+                                )
+                            )
+                    )
+                }
+
+                // Top Tags
                 Row(
-                    modifier = Modifier.align(Alignment.TopStart),
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(12.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    // Terrain tag
                     Surface(
                         shape = RoundedCornerShape(8.dp),
-                        color = Color.Black.copy(alpha = 0.35f)
+                        color = Color.Black.copy(alpha = 0.5f)
                     ) {
                         Row(
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
@@ -84,7 +118,7 @@ fun CampsiteCard(
                                 imageVector = Icons.Default.Landscape,
                                 contentDescription = null,
                                 tint = Color.White,
-                                modifier = Modifier.size(14.dp)
+                                modifier = Modifier.size(13.dp)
                             )
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(
@@ -96,32 +130,69 @@ fun CampsiteCard(
                         }
                     }
 
-                    Spacer(modifier = Modifier.width(8.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
 
+                    // Park4night verified badge
+                    if (campsite.isPark4NightVerified) {
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = Color(0xFF2E7D32).copy(alpha = 0.9f)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 7.dp, vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "🌲 Park4night",
+                                    color = Color.White,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.width(6.dp))
+                    }
+
+                    // Elevation
                     Surface(
                         shape = RoundedCornerShape(8.dp),
-                        color = Color.Black.copy(alpha = 0.35f)
+                        color = Color.Black.copy(alpha = 0.5f)
                     ) {
                         Text(
-                            text = "${campsite.sleep.elevationFt} ft",
-                            color = Color.White.copy(alpha = 0.9f),
+                            text = formattedElevation,
+                            color = Color.White.copy(alpha = 0.95f),
                             fontSize = 11.sp,
                             modifier = Modifier.padding(horizontal = 7.dp, vertical = 4.dp)
                         )
                     }
                 }
 
-                // Action Buttons (Google Maps & Bookmark)
+                // Action Buttons: Park4Night, Google Maps & Bookmark
                 Row(
-                    modifier = Modifier.align(Alignment.TopEnd),
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(10.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    if (onOpenPark4Night != null) {
+                        IconButton(
+                            onClick = onOpenPark4Night,
+                            modifier = Modifier
+                                .size(34.dp)
+                                .background(Color.Black.copy(alpha = 0.5f), CircleShape)
+                                .testTag("card_p4n_btn_${campsite.id}")
+                        ) {
+                            Text("🌲", fontSize = 14.sp)
+                        }
+                        Spacer(modifier = Modifier.width(6.dp))
+                    }
+
                     if (onOpenGoogleMaps != null) {
                         IconButton(
                             onClick = onOpenGoogleMaps,
                             modifier = Modifier
                                 .size(34.dp)
-                                .background(Color.Black.copy(alpha = 0.4f), CircleShape)
+                                .background(Color.Black.copy(alpha = 0.5f), CircleShape)
                                 .testTag("card_gmaps_btn_${campsite.id}")
                         ) {
                             Icon(
@@ -138,7 +209,7 @@ fun CampsiteCard(
                         onClick = onToggleBookmark,
                         modifier = Modifier
                             .size(34.dp)
-                            .background(Color.Black.copy(alpha = 0.4f), CircleShape)
+                            .background(Color.Black.copy(alpha = 0.5f), CircleShape)
                             .testTag("bookmark_btn_${campsite.id}")
                     ) {
                         Icon(
@@ -150,9 +221,11 @@ fun CampsiteCard(
                     }
                 }
 
-                // Campsite Name and Region
+                // Campsite Name, Region & Country
                 Column(
-                    modifier = Modifier.align(Alignment.BottomStart)
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .padding(horizontal = 14.dp, vertical = 10.dp)
                 ) {
                     Text(
                         text = campsite.name,
@@ -164,7 +237,7 @@ fun CampsiteCard(
                     )
                     Text(
                         text = "${campsite.region} • ${campsite.stateOrCountry}",
-                        color = Color.White.copy(alpha = 0.85f),
+                        color = Color.White.copy(alpha = 0.9f),
                         fontSize = 12.sp,
                         maxLines = 1
                     )
@@ -205,9 +278,9 @@ fun CampsiteCard(
                     }
 
                     Text(
-                        text = "$distanceMiles mi away",
+                        text = formattedDistance,
                         fontSize = 12.sp,
-                        fontWeight = FontWeight.Medium,
+                        fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.primary
                     )
 
@@ -246,7 +319,7 @@ fun CampsiteCard(
                     PillarSummaryPill(
                         icon = Icons.Default.WaterDrop,
                         title = if (campsite.water.sourceType.isPotable) "Potable Water" else "Filter Needed",
-                        subtitle = "${campsite.water.distanceToSourceMeters}m to source",
+                        subtitle = "${campsite.water.distanceToSourceMeters}m to tap",
                         accentColor = Color(0xFF0288D1),
                         bgColor = Color(0xFFE1F5FE),
                         modifier = Modifier.weight(1f)
@@ -255,7 +328,7 @@ fun CampsiteCard(
                     // Pillar 3: Energy
                     PillarSummaryPill(
                         icon = Icons.Default.Bolt,
-                        title = if (campsite.energy.sourceType.hasGridPower) "Hookup / Outlet" else "Solar Off-Grid",
+                        title = if (campsite.energy.sourceType.hasGridPower) "Hookup / 16A" else "Solar Off-Grid",
                         subtitle = "Solar: ${campsite.energy.solarExposureIndex}/10",
                         accentColor = Color(0xFFF57C00),
                         bgColor = Color(0xFFFFF3E0),
@@ -314,7 +387,11 @@ fun PillarSummaryPill(
 }
 
 @Composable
-fun SleepSectionCard(sleep: SleepDetails, modifier: Modifier = Modifier) {
+fun SleepSectionCard(
+    sleep: SleepDetails,
+    unitSystem: UnitSystem = UnitSystem.METRIC,
+    modifier: Modifier = Modifier
+) {
     Card(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
@@ -381,9 +458,9 @@ fun SleepSectionCard(sleep: SleepDetails, modifier: Modifier = Modifier) {
                     modifier = Modifier.weight(1f)
                 )
                 InfoItem(
-                    label = "Tree Shade",
-                    value = "${sleep.shadeRating} / 5 Stars",
-                    icon = Icons.Default.WbSunny,
+                    label = "Elevation",
+                    value = unitSystem.formatElevation(sleep.elevationFt),
+                    icon = Icons.Default.Landscape,
                     modifier = Modifier.weight(1f)
                 )
             }
@@ -419,7 +496,11 @@ fun SleepSectionCard(sleep: SleepDetails, modifier: Modifier = Modifier) {
 }
 
 @Composable
-fun WaterSectionCard(water: WaterDetails, modifier: Modifier = Modifier) {
+fun WaterSectionCard(
+    water: WaterDetails,
+    unitSystem: UnitSystem = UnitSystem.METRIC,
+    modifier: Modifier = Modifier
+) {
     Card(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
@@ -469,7 +550,7 @@ fun WaterSectionCard(water: WaterDetails, modifier: Modifier = Modifier) {
                 )
                 InfoItem(
                     label = "Tap / Stream Distance",
-                    value = if (water.distanceToSourceMeters == 0) "Pack In (Dry)" else "${water.distanceToSourceMeters} meters away",
+                    value = if (water.distanceToSourceMeters == 0) "Pack In (Dry)" else unitSystem.formatWaterDistance(water.distanceToSourceMeters),
                     icon = Icons.Default.DirectionsWalk,
                     modifier = Modifier.weight(1f)
                 )
@@ -490,33 +571,6 @@ fun WaterSectionCard(water: WaterDetails, modifier: Modifier = Modifier) {
                     icon = Icons.Default.Countertops,
                     modifier = Modifier.weight(1f)
                 )
-            }
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            Surface(
-                shape = RoundedCornerShape(8.dp),
-                color = MaterialTheme.colorScheme.surface
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(10.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Info,
-                        contentDescription = "Reliability",
-                        tint = Color(0xFF0288D1),
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "Flow Reliability: ${water.flowReliability}",
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                }
             }
         }
     }
@@ -548,7 +602,7 @@ fun EnergySectionCard(energy: EnergyDetails, modifier: Modifier = Modifier) {
                 Spacer(modifier = Modifier.width(12.dp))
                 Column {
                     Text(
-                        text = "Power & Energy Hookups",
+                        text = "Energy, Hookup & Solar Setup",
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
@@ -564,51 +618,18 @@ fun EnergySectionCard(energy: EnergyDetails, modifier: Modifier = Modifier) {
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            // Solar meter
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(MaterialTheme.colorScheme.surface)
-                    .padding(10.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Default.WbSunny,
-                            contentDescription = null,
-                            tint = Color(0xFFF57C00),
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = "Solar Exposure Viability",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                    }
-                    Text(
-                        text = "${energy.solarExposureIndex} / 10",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFFF57C00)
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(6.dp))
-
-                LinearProgressIndicator(
-                    progress = { energy.solarExposureIndex / 10f },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(8.dp)
-                        .clip(RoundedCornerShape(4.dp)),
-                    color = Color(0xFFF57C00),
-                    trackColor = Color(0xFFFFE0B2)
+            Row(modifier = Modifier.fillMaxWidth()) {
+                InfoItem(
+                    label = "Solar Clearing Index",
+                    value = "${energy.solarExposureIndex} / 10 Prime Solar",
+                    icon = Icons.Default.WbSunny,
+                    modifier = Modifier.weight(1f)
+                )
+                InfoItem(
+                    label = "Shore Hookup Power",
+                    value = if (energy.sourceType.hasGridPower) "Available (16A/30A)" else "Zero Grid Hookup",
+                    icon = Icons.Default.Power,
+                    modifier = Modifier.weight(1f)
                 )
             }
 
@@ -616,32 +637,15 @@ fun EnergySectionCard(energy: EnergyDetails, modifier: Modifier = Modifier) {
 
             Row(modifier = Modifier.fillMaxWidth()) {
                 InfoItem(
-                    label = "Campfire Pit",
-                    value = if (energy.campfireRing) "Allowed in Ring" else "Fire Ban Active",
+                    label = "EV Charging Support",
+                    value = if (energy.hasEvCharging) "Yes (Type 2 / Level 2)" else "Not Available",
+                    icon = Icons.Default.ElectricCar,
+                    modifier = Modifier.weight(1f)
+                )
+                InfoItem(
+                    label = "Campfire Rules",
+                    value = if (energy.campfireRing) "Allowed in Ring" else "No Open Fires",
                     icon = Icons.Default.LocalFireDepartment,
-                    modifier = Modifier.weight(1f)
-                )
-                InfoItem(
-                    label = "Firewood Available",
-                    value = if (energy.firewoodPurchasable) "Buy at Ranger Host" else "Bring your own",
-                    icon = Icons.Default.Forest,
-                    modifier = Modifier.weight(1f)
-                )
-            }
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            Row(modifier = Modifier.fillMaxWidth()) {
-                InfoItem(
-                    label = "EV / Rig Charging",
-                    value = if (energy.hasEvCharging) "Supported" else "Standard Rig Only",
-                    icon = Icons.Default.EvStation,
-                    modifier = Modifier.weight(1f)
-                )
-                InfoItem(
-                    label = "Generator Hours",
-                    value = energy.generatorHours,
-                    icon = Icons.Default.ElectricalServices,
                     modifier = Modifier.weight(1f)
                 )
             }
@@ -650,43 +654,37 @@ fun EnergySectionCard(energy: EnergyDetails, modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun InfoItem(
+fun InfoItem(
     label: String,
     value: String,
     icon: ImageVector,
     modifier: Modifier = Modifier
 ) {
-    Surface(
-        modifier = modifier.padding(horizontal = 4.dp),
-        shape = RoundedCornerShape(8.dp),
-        color = MaterialTheme.colorScheme.surface
+    Row(
+        modifier = modifier.padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(
-            modifier = Modifier.padding(8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(16.dp)
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(16.dp)
+        )
+        Spacer(modifier = Modifier.width(6.dp))
+        Column {
+            Text(
+                text = label,
+                fontSize = 10.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            Spacer(modifier = Modifier.width(6.dp))
-            Column {
-                Text(
-                    text = label,
-                    fontSize = 10.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Text(
-                    text = value,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
+            Text(
+                text = value,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
         }
     }
 }

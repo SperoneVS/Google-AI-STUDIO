@@ -55,7 +55,7 @@ fun RadarMapScreen(
                 title = {
                     Column {
                         Text("Wilderness Radar Map", fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                        Text("Topographic Campsite Range", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("Topographic Campsite Range • Made by Victor", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 },
                 navigationIcon = {
@@ -378,16 +378,38 @@ fun RadarMapScreen(
 
                             Spacer(modifier = Modifier.height(12.dp))
 
-                            Button(
-                                onClick = {
-                                    viewModel.navigateTo(ScreenDestination.Detail(site.id))
-                                },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .testTag("radar_view_site_btn"),
-                                shape = RoundedCornerShape(12.dp)
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                Text("Inspect Sleeping, Water & Power Details")
+                                Button(
+                                    onClick = { viewModel.navigateTo(ScreenDestination.Detail(site.id)) },
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .testTag("radar_view_site_btn"),
+                                    shape = RoundedCornerShape(12.dp)
+                                ) {
+                                    Text("View Details")
+                                }
+
+                                OutlinedButton(
+                                    onClick = {
+                                        com.example.util.GoogleMapsHelper.openCampsiteInGoogleMaps(
+                                            context = context,
+                                            latitude = site.latitude,
+                                            longitude = site.longitude,
+                                            campsiteName = site.name
+                                        )
+                                    },
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .testTag("radar_open_maps_btn"),
+                                    shape = RoundedCornerShape(12.dp)
+                                ) {
+                                    Icon(Icons.Default.Map, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Maps")
+                                }
                             }
                         }
                     }

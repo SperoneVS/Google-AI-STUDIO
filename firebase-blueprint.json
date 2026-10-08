@@ -1,0 +1,108 @@
+{
+  "entities": {
+    "campsite": {
+      "title": "Campsite",
+      "description": "A verified camping location with sleep, water, and energy specs and limits.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "description": "Campsite title" },
+        "region": { "type": "string", "description": "Region or park" },
+        "stateOrCountry": { "type": "string", "description": "State or Country" },
+        "latitude": { "type": "number", "description": "Latitude coordinate" },
+        "longitude": { "type": "number", "description": "Longitude coordinate" },
+        "feePerNight": { "type": "string", "description": "Fee per night description" },
+        "rating": { "type": "number", "description": "Average review rating" },
+        "reviewCount": { "type": "number", "description": "Number of reviews" },
+        "sleepingSetup": { "type": "string", "description": "Sleep setup label" },
+        "waterAvailability": { "type": "string", "description": "Water availability label" },
+        "energyHookupStatus": { "type": "string", "description": "Energy status label" },
+        "maxVehicleHeightFt": { "type": "number", "description": "Clearance in feet" },
+        "maxVehicleWeightLbs": { "type": "number", "description": "Pad weight in lbs" },
+        "maxVehicleLengthFt": { "type": "number", "description": "Max length in feet" },
+        "maxStayNights": { "type": "number", "description": "Max stay nights" },
+        "maxPeople": { "type": "number", "description": "Max campers allowed" },
+        "isUserCreated": { "type": "boolean", "description": "Whether created by camper" },
+        "userId": { "type": "string", "description": "Author UID" }
+      },
+      "required": ["name", "sleepingSetup", "waterAvailability", "energyHookupStatus", "userId"]
+    },
+    "campsiteReview": {
+      "title": "CampsiteReview",
+      "description": "Post-visit camper review verifying water and energy availability.",
+      "type": "object",
+      "properties": {
+        "campsiteId": { "type": "string", "description": "Associated campsite ID" },
+        "camperName": { "type": "string", "description": "Name of reviewer" },
+        "camperEmail": { "type": "string", "description": "Email or phone identifier" },
+        "ratingStars": { "type": "number", "description": "Stars given (1 to 5)" },
+        "isWaterAvailable": { "type": "boolean", "description": "Whether water was available" },
+        "waterStatusLabel": { "type": "string", "description": "Water status detail" },
+        "isEnergyAvailable": { "type": "boolean", "description": "Whether energy hookup was available" },
+        "energyStatusLabel": { "type": "string", "description": "Energy status detail" },
+        "notes": { "type": "string", "description": "Camper field notes" },
+        "userId": { "type": "string", "description": "Reviewer UID" }
+      },
+      "required": ["campsiteId", "camperName", "ratingStars", "isWaterAvailable", "isEnergyAvailable", "userId"]
+    },
+    "userProfile": {
+      "title": "UserProfile",
+      "description": "Camper user profile with vehicle rig specifications.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Camper user UID" },
+        "displayName": { "type": "string", "description": "Full name or handle" },
+        "email": { "type": "string", "description": "Email address" },
+        "vehicleModel": { "type": "string", "description": "Model of vehicle or campervan" },
+        "vehicleHeight": { "type": "string", "description": "Height clearance of vehicle" },
+        "vehicleWeight": { "type": "string", "description": "Weight of vehicle" },
+        "licensePlate": { "type": "string", "description": "Vehicle license plate" }
+      },
+      "required": ["userId"]
+    },
+    "bookmark": {
+      "title": "Bookmark",
+      "description": "Bookmarked campsite ID for camper.",
+      "type": "object",
+      "properties": {
+        "campsiteId": { "type": "string", "description": "Bookmarked campsite ID" },
+        "savedAt": { "type": "string", "format": "date-time", "description": "Timestamp" }
+      },
+      "required": ["campsiteId"]
+    },
+    "gearItem": {
+      "title": "GearItem",
+      "description": "Camper checklist gear item.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Gear item ID" },
+        "category": { "type": "string", "description": "Category: SLEEP, WATER, ENERGY, CAMP_COOKING" },
+        "title": { "type": "string", "description": "Title of gear" },
+        "subtitle": { "type": "string", "description": "Gear details" },
+        "isChecked": { "type": "boolean", "description": "Pack status" }
+      },
+      "required": ["id", "category", "title", "isChecked"]
+    }
+  },
+  "firestore": {
+    "/campsites/{campsiteId}": {
+      "schema": "campsite",
+      "description": "Verified campsite locations and pitch details."
+    },
+    "/campsites/{campsiteId}/reviews/{reviewId}": {
+      "schema": "campsiteReview",
+      "description": "Camper visit reports verifying water, energy, and overall ratings."
+    },
+    "/users/{userId}": {
+      "schema": "userProfile",
+      "description": "Camper profiles and rig parameters."
+    },
+    "/users/{userId}/bookmarks/{campsiteId}": {
+      "schema": "bookmark",
+      "description": "Camper bookmarked campsites."
+    },
+    "/users/{userId}/gear/{gearId}": {
+      "schema": "gearItem",
+      "description": "Camper checklist gear items."
+    }
+  }
+}

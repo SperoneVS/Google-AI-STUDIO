@@ -2,7 +2,9 @@ package com.example
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
-import com.example.data.repository.AuthRepository
+import com.example.data.model.AuthMethod
+import com.example.data.model.UserProfile
+import com.example.data.repository.CampsiteRepository
 import com.example.ui.viewmodel.CampsiteViewModel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -33,60 +35,32 @@ class ExampleRobolectricTest {
   }
 
   @Test
-  fun `test phone otp send and verification flow`() {
-    val context = ApplicationProvider.getApplicationContext<Context>()
-    val authRepo = AuthRepository(context)
-
-    var generatedCode = ""
-    authRepo.sendPhoneOtp(
-        activity = null,
-        phoneNumber = "+15550199",
-        onCodeSent = { code -> generatedCode = code },
-        onAutoVerified = { /* no op */ },
-        onError = { /* no op */ }
-    )
-
-    assertTrue("Generated OTP code should be 6 digits", generatedCode.length == 6)
-
-    var verifiedUser: com.example.data.model.UserProfile? = null
-    authRepo.verifyOtp(
-        enteredCode = generatedCode,
-        onSuccess = { user -> verifiedUser = user },
-        onError = { /* no op */ }
-    )
-    assertNotNull(verifiedUser)
-    assertEquals("+15550199", verifiedUser?.phoneNumber)
+  fun `test 12 hour sync interval constant`() {
+    val twelveHoursMillis = CampsiteRepository.TWELVE_HOURS_MILLIS
+    assertEquals(12 * 60 * 60 * 1000L, twelveHoursMillis)
   }
 
   @Test
-  fun `test user can login with their own google account`() {
-    val context = ApplicationProvider.getApplicationContext<Context>()
-    val authRepo = AuthRepository(context)
+  fun `test user profile and vehicle specifications`() {
+    val user = UserProfile(
+        id = "camper_test_1",
+        displayName = "Alpine Nomad",
+        email = "nomad@camphaven.org",
+        authMethod = AuthMethod.GOOGLE,
+        vehicleModel = "Ford Transit Custom",
+        vehicleHeight = "8 ft 4 in",
+        vehicleWeight = "6,200 lbs",
+        licensePlate = "CAMP-777"
+    )
 
-    val customEmail = "user.camper@gmail.com"
-    val customName = "User Camper"
-    val result = authRepo.directGoogleSignIn(customEmail, customName)
-    assertTrue("Direct Google sign-in with user account should succeed", result.isSuccess)
-    val user = result.getOrNull()
-    assertNotNull(user)
-    assertEquals(customEmail, user?.email)
-    assertEquals(customName, user?.displayName)
-    assertEquals(com.example.data.model.AuthMethod.GOOGLE, user?.authMethod)
-  }
-
-  @Test
-  fun `test user can login with their own email address`() {
-    val context = ApplicationProvider.getApplicationContext<Context>()
-    val authRepo = AuthRepository(context)
-
-    val email = "nature.backpacker@gmail.com"
-    val result = authRepo.signInWithEmail(email)
-    assertTrue("Sign-in with email should succeed", result.isSuccess)
-    val user = result.getOrNull()
-    assertNotNull(user)
-    assertEquals(email, user?.email)
-    assertEquals("Nature Backpacker", user?.displayName)
-    assertEquals(com.example.data.model.AuthMethod.EMAIL_OTP, user?.authMethod)
+    assertEquals("camper_test_1", user.id)
+    assertEquals("Alpine Nomad", user.displayName)
+    assertEquals("nomad@camphaven.org", user.email)
+    assertEquals("8 ft 4 in", user.vehicleHeight)
+    assertEquals("6,200 lbs", user.vehicleWeight)
+    assertEquals("Ford Transit Custom", user.vehicleModel)
+    assertEquals("CAMP-777", user.licensePlate)
+    assertEquals(AuthMethod.GOOGLE, user.authMethod)
   }
 
   @Test
@@ -142,7 +116,7 @@ class ExampleRobolectricTest {
   }
 
   @Test
-  fun `test Room Campsite entity with name sleeping setup water and energy hookup status`() = kotlinx.coroutines.runBlocking {
+  fun `test Room Campsite entity with name sleeping setup water and energy hookup status`() = runBlocking {
     val context = ApplicationProvider.getApplicationContext<Context>()
     val database = com.example.data.local.AppDatabase.getInstance(context)
     val dao = database.campsiteDao()
@@ -170,28 +144,6 @@ class ExampleRobolectricTest {
   }
 
   @Test
-  fun `test vehicle questions height weight model and licence plate`() {
-    val context = ApplicationProvider.getApplicationContext<Context>()
-    val authRepo = AuthRepository(context)
-
-    val result = authRepo.signInWithEmail(
-        email = "vanlife@camphaven.org",
-        vehicleHeight = "8 ft 4 in",
-        vehicleWeight = "6,200 lbs",
-        vehicleModel = "Ford Transit Custom",
-        licensePlate = "CAMP-777"
-    )
-
-    assertTrue(result.isSuccess)
-    val user = result.getOrNull()
-    assertNotNull(user)
-    assertEquals("8 ft 4 in", user?.vehicleHeight)
-    assertEquals("6,200 lbs", user?.vehicleWeight)
-    assertEquals("Ford Transit Custom", user?.vehicleModel)
-    assertEquals("CAMP-777", user?.licensePlate)
-  }
-
-  @Test
   fun `test delete live location in campsite name`() {
     val clean1 = com.example.data.repository.cleanCampsiteName("Live Location Alpine Ridge")
     assertTrue("Name must not contain Live Location", !clean1.contains("Live Location", ignoreCase = true))
@@ -203,7 +155,7 @@ class ExampleRobolectricTest {
   }
 
   @Test
-  fun `test post-visit review rating with water and energy availability`() = kotlinx.coroutines.runBlocking {
+  fun `test post-visit review rating with water and energy availability`() = runBlocking {
     val context = ApplicationProvider.getApplicationContext<Context>()
     val database = com.example.data.local.AppDatabase.getInstance(context)
     val dao = database.campsiteDao()

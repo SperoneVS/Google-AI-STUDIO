@@ -23,6 +23,8 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.layout.ContentScale
+import coil.compose.AsyncImage
 import com.example.data.model.Campsite
 import com.example.data.repository.CampsiteDetailFactory
 import com.example.ui.components.CampsiteDetailedInfoComponent
@@ -32,6 +34,7 @@ import com.example.ui.components.WaterSectionCard
 import com.example.ui.viewmodel.CampsiteViewModel
 import com.example.ui.viewmodel.ScreenDestination
 import com.example.util.GoogleMapsHelper
+import com.example.util.Park4NightHelper
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -47,6 +50,7 @@ fun DetailScreen(
     val context = LocalContext.current
     val campsites by viewModel.filteredCampsites.collectAsState()
     val campsite = campsites.find { it.id == campsiteId }
+    val unitSystem by viewModel.unitSystem.collectAsState()
 
     if (campsite == null) {
         Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -132,34 +136,80 @@ fun DetailScreen(
                 .padding(paddingValues)
                 .verticalScroll(rememberScrollState())
         ) {
-            // Scenic Banner
+            // Scenic Banner with Real Campsite Photo
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(160.dp)
-                    .background(
-                        brush = Brush.verticalGradient(
-                            colors = listOf(
-                                Color(0xFF14382A),
-                                Color(0xFF26533F)
-                            )
-                        )
-                    )
-                    .padding(18.dp)
+                    .height(200.dp)
             ) {
-                Column(modifier = Modifier.align(Alignment.BottomStart)) {
-                    Surface(
-                        shape = RoundedCornerShape(8.dp),
-                        color = Color.Black.copy(alpha = 0.4f)
-                    ) {
-                        Text(
-                            text = "${campsite.terrainType} • ${campsite.region}",
-                            color = Color.White,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Medium,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                        )
+                if (campsite.photoUrl.isNotBlank()) {
+                    AsyncImage(
+                        model = campsite.photoUrl,
+                        contentDescription = campsite.name,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(
+                                Brush.verticalGradient(
+                                    colors = listOf(
+                                        Color.Black.copy(alpha = 0.5f),
+                                        Color.Transparent,
+                                        Color.Black.copy(alpha = 0.85f)
+                                    )
+                                )
+                            )
+                    )
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(
+                                brush = Brush.verticalGradient(
+                                    colors = listOf(Color(0xFF14382A), Color(0xFF26533F))
+                                )
+                            )
+                    )
+                }
+
+                Column(
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .padding(18.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = Color.Black.copy(alpha = 0.55f)
+                        ) {
+                            Text(
+                                text = "${campsite.terrainType} • ${campsite.region}",
+                                color = Color.White,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Medium,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            )
+                        }
+
+                        if (campsite.isPark4NightVerified) {
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = Color(0xFF2E7D32)
+                            ) {
+                                Text(
+                                    text = "🌲 Park4night Verified",
+                                    color = Color.White,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                )
+                            }
+                        }
                     }
+
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(
                         text = campsite.name,
@@ -168,8 +218,8 @@ fun DetailScreen(
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = "${campsite.stateOrCountry} • $distance mi away",
-                        color = Color.White.copy(alpha = 0.9f),
+                        text = "${campsite.stateOrCountry} • ${viewModel.getFormattedDistanceToSite(campsite)} • Elevation ${unitSystem.formatElevation(campsite.sleep.elevationFt)}",
+                        color = Color.White.copy(alpha = 0.95f),
                         fontSize = 13.sp
                     )
                 }
@@ -177,7 +227,9 @@ fun DetailScreen(
                 Surface(
                     shape = RoundedCornerShape(10.dp),
                     color = MaterialTheme.colorScheme.primaryContainer,
-                    modifier = Modifier.align(Alignment.TopEnd)
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(14.dp)
                 ) {
                     Text(
                         text = campsite.feePerNight,
@@ -189,7 +241,7 @@ fun DetailScreen(
                 }
             }
 
-            // Action Buttons Strip (Google Maps & Pack checklist)
+            // Action Buttons Strip (Google Maps Route, View Map, Park4night, Pack)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -210,9 +262,9 @@ fun DetailScreen(
                     shape = RoundedCornerShape(12.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                 ) {
-                    Icon(Icons.Default.Navigation, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text("Google Maps Route", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Icon(Icons.Default.Navigation, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Google Route", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                 }
 
                 OutlinedButton(
@@ -230,21 +282,97 @@ fun DetailScreen(
                     shape = RoundedCornerShape(12.dp),
                     colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF0277BD))
                 ) {
-                    Icon(Icons.Default.Map, contentDescription = null, modifier = Modifier.size(18.dp), tint = Color(0xFF0277BD))
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text("Map View", fontSize = 12.sp)
+                    Icon(Icons.Default.Map, contentDescription = null, modifier = Modifier.size(16.dp), tint = Color(0xFF0277BD))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Maps", fontSize = 11.sp)
+                }
+
+                // Park4night button
+                OutlinedButton(
+                    onClick = {
+                        Park4NightHelper.openSpotInPark4Night(
+                            context = context,
+                            latitude = campsite.latitude,
+                            longitude = campsite.longitude,
+                            spotName = campsite.name
+                        )
+                    },
+                    modifier = Modifier
+                        .weight(1.1f)
+                        .testTag("open_p4n_btn"),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF2E7D32))
+                ) {
+                    Text("🌲 Park4night", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFF2E7D32))
                 }
 
                 OutlinedButton(
                     onClick = { viewModel.navigateTo(ScreenDestination.GearChecklist) },
                     modifier = Modifier
-                        .weight(0.9f)
+                        .weight(0.8f)
                         .testTag("pack_gear_btn"),
                     shape = RoundedCornerShape(12.dp)
                 ) {
-                    Icon(Icons.Default.ChecklistRtl, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("Pack", fontSize = 12.sp)
+                    Icon(Icons.Default.ChecklistRtl, contentDescription = null, modifier = Modifier.size(16.dp))
+                }
+            }
+
+            // Google Maps & Park4night Field Verification Card
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 4.dp),
+                shape = RoundedCornerShape(14.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFFE8F5E9))
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Verified,
+                            contentDescription = null,
+                            tint = Color(0xFF2E7D32),
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column {
+                            Text(
+                                text = if (campsite.isPark4NightVerified) "Park4night & Google Maps Verified Spot" else "GPS Verified Field Coordinates",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF1B5E20)
+                            )
+                            Text(
+                                text = if (campsite.park4NightNote.isNotBlank()) campsite.park4NightNote else "Accurate coordinates: ${campsite.latitude}, ${campsite.longitude}",
+                                fontSize = 11.sp,
+                                color = Color(0xFF2E7D32)
+                            )
+                        }
+                    }
+
+                    Button(
+                        onClick = {
+                            GoogleMapsHelper.openCampsiteInGoogleMaps(
+                                context = context,
+                                latitude = campsite.latitude,
+                                longitude = campsite.longitude,
+                                campsiteName = campsite.name
+                            )
+                        },
+                        shape = RoundedCornerShape(10.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32)),
+                        modifier = Modifier.testTag("verify_maps_coordinates_btn")
+                    ) {
+                        Text("Google Maps", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    }
                 }
             }
 
@@ -342,6 +470,7 @@ fun DetailScreen(
             Spacer(modifier = Modifier.height(6.dp))
             SleepSectionCard(
                 sleep = campsite.sleep,
+                unitSystem = unitSystem,
                 modifier = Modifier.padding(horizontal = 16.dp)
             )
 
@@ -358,6 +487,7 @@ fun DetailScreen(
             Spacer(modifier = Modifier.height(6.dp))
             WaterSectionCard(
                 water = campsite.water,
+                unitSystem = unitSystem,
                 modifier = Modifier.padding(horizontal = 16.dp)
             )
 

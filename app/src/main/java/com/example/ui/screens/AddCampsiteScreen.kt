@@ -34,12 +34,14 @@ fun AddCampsiteScreen(
 
     var name by remember { mutableStateOf("") }
     var region by remember { mutableStateOf("") }
-    var stateOrCountry by remember { mutableStateOf("USA") }
-    var latText by remember { mutableStateOf("37.865") }
-    var lonText by remember { mutableStateOf("-119.538") }
-    var elevationText by remember { mutableStateOf("4500") }
-    var feeText by remember { mutableStateOf("Free / Dispersed") }
+    var stateOrCountry by remember { mutableStateOf("Europe (France)") }
+    var latText by remember { mutableStateOf("45.9237") }
+    var lonText by remember { mutableStateOf("6.8694") }
+    var elevationText by remember { mutableStateOf("3200") }
+    var feeText by remember { mutableStateOf("€18 / night") }
     var terrainType by remember { mutableStateOf("Alpine Forest") }
+    var photoUrlText by remember { mutableStateOf("") }
+    var isPark4NightSpot by remember { mutableStateOf(true) }
 
     // Sleep
     var selectedSleepType by remember { mutableStateOf(SleepType.TENT) }
@@ -475,6 +477,10 @@ fun AddCampsiteScreen(
                         terrainType = terrainType,
                         description = if (description.isBlank()) "Wilderness campsite discovered and logged by camper." else description.trim(),
                         insiderTips = if (insiderTips.isBlank()) "Pack out all trash and respect quiet hours." else insiderTips.trim(),
+                        photoUrl = photoUrlText.ifBlank { "https://images.unsplash.com/photo-1506744038136-46273834b3fb?w=800" },
+                        photoUrls = listOf(photoUrlText.ifBlank { "https://images.unsplash.com/photo-1506744038136-46273834b3fb?w=800" }),
+                        isPark4NightVerified = isPark4NightSpot,
+                        park4NightNote = if (isPark4NightSpot) "Verified by community camper" else "",
                         isUserCreated = true
                     )
 
@@ -486,9 +492,33 @@ fun AddCampsiteScreen(
                     .testTag("save_campsite_btn"),
                 shape = RoundedCornerShape(12.dp)
             ) {
-                Icon(Icons.Default.Check, contentDescription = null)
+                Icon(Icons.Default.CloudUpload, contentDescription = null)
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("Save Campsite to Database", fontWeight = FontWeight.Bold)
+                Text("Share Campsite with Everyone", fontWeight = FontWeight.Bold)
+            }
+
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier.padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Public,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Once published, this campsite is stored in Cloud Firestore and immediately shared with all campers using the app.",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                }
             }
         }
     }

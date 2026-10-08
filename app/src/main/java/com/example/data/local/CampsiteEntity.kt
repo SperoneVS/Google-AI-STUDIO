@@ -43,6 +43,8 @@ data class CampsiteEntity(
     val terrainType: String,
     val description: String,
     val insiderTips: String,
+    val photoUrl: String = "",
+    val isPark4NightVerified: Boolean = false,
     val isUserCreated: Boolean = true
 )
 

@@ -2,350 +2,191 @@ package com.example.data.repository
 
 import android.app.Activity
 import android.content.Context
-import android.content.SharedPreferences
 import android.util.Log
 import androidx.credentials.CredentialManager
 import androidx.credentials.GetCredentialRequest
+import androidx.credentials.exceptions.GetCredentialCancellationException
 import androidx.credentials.exceptions.GetCredentialException
+import com.example.R
 import com.example.data.model.AuthMethod
 import com.example.data.model.UserProfile
 import com.google.android.libraries.identity.googleid.GetGoogleIdOption
+import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
-import com.google.firebase.FirebaseApp
-import com.google.firebase.FirebaseException
-import com.google.firebase.FirebaseTooManyRequestsException
 import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.auth.FirebaseAuthInvalidCredentialsException
-import com.google.firebase.auth.PhoneAuthCredential
-import com.google.firebase.auth.PhoneAuthOptions
-import com.google.firebase.auth.PhoneAuthProvider
+import com.google.firebase.auth.GoogleAuthProvider
+import com.google.firebase.firestore.FieldValue
+import com.google.firebase.firestore.FirebaseFirestore
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import java.security.SecureRandom
-import java.util.UUID
-import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.tasks.await
 
-/**
- * Authentication Repository implementing official Firebase Phone Number Verification:
- * Reference: https://firebase.google.com/docs/phone-number-verification/android/get-started
- * Pure Firebase Auth & Google Identity — No third-party SMS providers like Twilio.
- */
 class AuthRepository(private val context: Context) {
 
-    private val prefs: SharedPreferences = context.getSharedPreferences("camphaven_auth_prefs", Context.MODE_PRIVATE)
+    private val auth: FirebaseAuth by lazy { FirebaseAuth.getInstance() }
+    private val db: FirebaseFirestore by lazy {
+        FirebaseFirestore.getInstance(context.getString(R.string.firestore_database_id))
+    }
 
-    private val _currentUser = MutableStateFlow<UserProfile?>(loadStoredUser())
+    private val _currentUser = MutableStateFlow<UserProfile?>(null)
     val currentUser: StateFlow<UserProfile?> = _currentUser.asStateFlow()
 
-    // Firebase Phone Auth session variables
-    private var storedVerificationId: String? = null
-    private var resendToken: PhoneAuthProvider.ForceResendingToken? = null
-    private var pendingPhoneNumber: String? = null
-
-    // Local fallback code for emulator testing when Firebase project lacks live SMS quota / google-services.json
-    private var localFallbackCode: String? = null
-
-    private fun getFirebaseAuth(): FirebaseAuth? {
-        return try {
-            if (FirebaseApp.getApps(context).isEmpty()) {
-                null
-            } else {
-                FirebaseAuth.getInstance()
-            }
-        } catch (e: Exception) {
-            Log.w("AuthRepository", "Firebase not yet initialized: ${e.message}")
-            null
-        }
-    }
-
-    private fun loadStoredUser(): UserProfile? {
-        val isLoggedIn = prefs.getBoolean("is_logged_in", false)
-        if (!isLoggedIn) return null
-
-        val id = prefs.getString("user_id", "") ?: return null
-        val name = prefs.getString("user_display_name", "Camper") ?: "Camper"
-        val phone = prefs.getString("user_phone", null)
-        val email = prefs.getString("user_email", null)
-        val methodStr = prefs.getString("user_auth_method", AuthMethod.EMAIL_OTP.name)
-        val method = runCatching { AuthMethod.valueOf(methodStr!!) }.getOrDefault(AuthMethod.EMAIL_OTP)
-        val vModel = prefs.getString("user_vehicle_model", null)
-        val vHeight = prefs.getString("user_vehicle_height", null)
-        val vWeight = prefs.getString("user_vehicle_weight", null)
-        val lPlate = prefs.getString("user_license_plate", null)
-
-        return UserProfile(
-            id = id,
-            displayName = name,
-            phoneNumber = phone,
-            email = email,
-            authMethod = method,
-            vehicleModel = vModel,
-            vehicleHeight = vHeight,
-            vehicleWeight = vWeight,
-            licensePlate = lPlate
-        )
-    }
-
-    fun saveUserToPrefs(user: UserProfile) {
-        prefs.edit().apply {
-            putBoolean("is_logged_in", true)
-            putString("user_id", user.id)
-            putString("user_display_name", user.displayName)
-            putString("user_phone", user.phoneNumber)
-            putString("user_email", user.email)
-            putString("user_auth_method", user.authMethod.name)
-            putString("user_vehicle_model", user.vehicleModel)
-            putString("user_vehicle_height", user.vehicleHeight)
-            putString("user_vehicle_weight", user.vehicleWeight)
-            putString("user_license_plate", user.licensePlate)
-            apply()
-        }
-        _currentUser.value = user
-    }
-
-    /**
-     * Official Firebase Phone Number Verification:
-     * Starts verification via PhoneAuthProvider.verifyPhoneNumber(...)
-     * Reference: https://firebase.google.com/docs/phone-number-verification/android/get-started
-     */
-    fun sendPhoneOtp(
-        activity: Activity?,
-        phoneNumber: String,
-        onCodeSent: (codeHint: String) -> Unit,
-        onAutoVerified: (UserProfile) -> Unit,
-        onError: (String) -> Unit
-    ) {
-        val cleanNumber = phoneNumber.trim().replace(" ", "")
-        if (cleanNumber.length < 8 || !cleanNumber.startsWith("+")) {
-            onError("Please enter a valid phone number in E.164 format (e.g., +15551234567)")
-            return
-        }
-
-        pendingPhoneNumber = cleanNumber
-        val auth = getFirebaseAuth()
-
-        if (auth != null && activity != null) {
-            val callbacks = object : PhoneAuthProvider.OnVerificationStateChangedCallbacks() {
-                override fun onVerificationCompleted(credential: PhoneAuthCredential) {
-                    Log.d("AuthRepository", "onVerificationCompleted: instant auto-verification")
-                    val smsCode = credential.smsCode
-                    if (smsCode != null) {
-                        localFallbackCode = smsCode
-                    }
-                    signInWithPhoneCredential(credential, cleanNumber, onAutoVerified, onError)
-                }
-
-                override fun onVerificationFailed(e: FirebaseException) {
-                    Log.e("AuthRepository", "onVerificationFailed", e)
-                    val msg = when (e) {
-                        is FirebaseAuthInvalidCredentialsException -> "Invalid phone number format."
-                        is FirebaseTooManyRequestsException -> "SMS quota exceeded. Please try again later."
-                        else -> e.localizedMessage ?: "Verification failed."
-                    }
-                    // If live Firebase fails due to missing Play Services or project setup in emulator,
-                    // gracefully use direct OTP so user is never blocked
-                    fallbackSendCode(cleanNumber, onCodeSent)
-                }
-
-                override fun onCodeSent(
-                    verificationId: String,
-                    token: PhoneAuthProvider.ForceResendingToken
-                ) {
-                    Log.d("AuthRepository", "onCodeSent: $verificationId")
-                    storedVerificationId = verificationId
-                    resendToken = token
-                    onCodeSent(verificationId)
-                }
-            }
-
-            val optionsBuilder = PhoneAuthOptions.newBuilder(auth)
-                .setPhoneNumber(cleanNumber)
-                .setTimeout(60L, TimeUnit.SECONDS)
-                .setActivity(activity)
-                .setCallbacks(callbacks)
-
-            resendToken?.let { optionsBuilder.setForceResendingToken(it) }
-
-            try {
-                PhoneAuthProvider.verifyPhoneNumber(optionsBuilder.build())
-            } catch (e: Exception) {
-                Log.e("AuthRepository", "Error invoking PhoneAuthProvider", e)
-                fallbackSendCode(cleanNumber, onCodeSent)
-            }
-        } else {
-            // FirebaseApp not yet initialized via google-services.json; provide instant secure OTP
-            fallbackSendCode(cleanNumber, onCodeSent)
-        }
-    }
-
-    private fun fallbackSendCode(phoneNumber: String, onCodeSent: (String) -> Unit) {
-        val random = SecureRandom()
-        val code = String.format("%06d", random.nextInt(1000000))
-        localFallbackCode = code
-        storedVerificationId = "local_verification_${UUID.randomUUID().toString().take(8)}"
-        onCodeSent(code)
-    }
-
-    /**
-     * Signs in with the PhoneAuthCredential received from Firebase
-     */
-    private fun signInWithPhoneCredential(
-        credential: PhoneAuthCredential,
-        phoneNumber: String,
-        onSuccess: (UserProfile) -> Unit,
-        onError: (String) -> Unit
-    ) {
-        val auth = getFirebaseAuth()
-        if (auth != null) {
-            auth.signInWithCredential(credential)
-                .addOnCompleteListener { task ->
-                    if (task.isSuccessful) {
-                        val firebaseUser = task.result?.user
-                        val user = UserProfile(
-                            id = firebaseUser?.uid ?: ("camper_" + UUID.randomUUID().toString().take(8)),
-                            displayName = "Camper " + phoneNumber.takeLast(4),
-                            phoneNumber = phoneNumber,
-                            authMethod = AuthMethod.PHONE_OTP
-                        )
-                        saveUserToPrefs(user)
-                        onSuccess(user)
-                    } else {
-                        val msg = task.exception?.localizedMessage ?: "Invalid verification code."
-                        onError(msg)
-                    }
-                }
-        } else {
-            val user = UserProfile(
-                id = "camper_" + UUID.randomUUID().toString().take(8),
-                displayName = "Camper " + phoneNumber.takeLast(4),
-                phoneNumber = phoneNumber,
-                authMethod = AuthMethod.PHONE_OTP
+    private val authListener = FirebaseAuth.AuthStateListener { firebaseAuth ->
+        val user = firebaseAuth.currentUser
+        if (user != null) {
+            val userProfile = UserProfile(
+                id = user.uid,
+                displayName = user.displayName ?: user.email?.substringBefore("@")?.replaceFirstChar { it.uppercase() } ?: "Camper",
+                email = user.email,
+                phoneNumber = user.phoneNumber,
+                authMethod = AuthMethod.GOOGLE
             )
-            saveUserToPrefs(user)
-            onSuccess(user)
-        }
-    }
-
-    /**
-     * Verifies the 6-digit OTP code using PhoneAuthProvider.getCredential(...)
-     */
-    fun verifyOtp(
-        enteredCode: String,
-        onSuccess: (UserProfile) -> Unit,
-        onError: (String) -> Unit
-    ) {
-        val code = enteredCode.trim()
-        val verificationId = storedVerificationId
-        val phone = pendingPhoneNumber ?: "+15550000000"
-
-        if (code.length != 6) {
-            onError("Please enter a valid 6-digit verification code.")
-            return
-        }
-
-        // Check if verified with Firebase PhoneAuthProvider
-        val auth = getFirebaseAuth()
-        if (auth != null && verificationId != null && !verificationId.startsWith("local_")) {
-            val credential = PhoneAuthProvider.getCredential(verificationId, code)
-            signInWithPhoneCredential(credential, phone, onSuccess, onError)
+            _currentUser.value = userProfile
+            // Load vehicle specs from Firestore
+            fetchUserProfileFromFirestore(user.uid)
         } else {
-            // Local verification
-            if (localFallbackCode != null && code != localFallbackCode) {
-                onError("Invalid verification code. Please check your SMS and try again.")
-                return
-            }
-
-            val user = UserProfile(
-                id = "phone_user_" + UUID.randomUUID().toString().take(8),
-                displayName = "Camper " + phone.takeLast(4),
-                phoneNumber = phone,
-                authMethod = AuthMethod.PHONE_OTP
-            )
-            saveUserToPrefs(user)
-            localFallbackCode = null
-            storedVerificationId = null
-            onSuccess(user)
+            _currentUser.value = null
         }
     }
 
+    init {
+        auth.addAuthStateListener(authListener)
+    }
+
+    private fun fetchUserProfileFromFirestore(uid: String) {
+        db.collection("users").document(uid).get()
+            .addOnSuccessListener { doc ->
+                if (doc != null && doc.exists()) {
+                    val current = _currentUser.value ?: return@addOnSuccessListener
+                    _currentUser.value = current.copy(
+                        displayName = doc.getString("displayName") ?: current.displayName,
+                        vehicleModel = doc.getString("vehicleModel") ?: current.vehicleModel,
+                        vehicleHeight = doc.getString("vehicleHeight") ?: current.vehicleHeight,
+                        vehicleWeight = doc.getString("vehicleWeight") ?: current.vehicleWeight,
+                        licensePlate = doc.getString("licensePlate") ?: current.licensePlate
+                    )
+                }
+            }
+            .addOnFailureListener { e ->
+                Log.w(TAG, "Error fetching user profile doc: ${e.message}")
+            }
+    }
+
     /**
-     * Sign in using Google with Android Credential Manager
+     * Interactive Google Sign-In using CredentialManager with GetSignInWithGoogleOption.
      */
     suspend fun signInWithGoogle(activity: Activity): Result<UserProfile> {
+        val serverClientId = context.getString(R.string.default_web_client_id)
+        val credentialManager = CredentialManager.create(activity)
+
+        val googleOption = GetSignInWithGoogleOption.Builder(serverClientId).build()
+
+        val request = GetCredentialRequest.Builder()
+            .addCredentialOption(googleOption)
+            .build()
+
         return try {
-            val credentialManager = CredentialManager.create(activity)
-
-            val googleIdOption = GetGoogleIdOption.Builder()
-                .setFilterByAuthorizedAccounts(false)
-                .setAutoSelectEnabled(false)
-                .build()
-
-            val request = GetCredentialRequest.Builder()
-                .addCredentialOption(googleIdOption)
-                .build()
-
-            val response = credentialManager.getCredential(
+            val result = credentialManager.getCredential(
                 request = request,
                 context = activity
             )
 
-            val credential = response.credential
+            val credential = result.credential
             if (credential.type == GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
                 val googleIdTokenCredential = GoogleIdTokenCredential.createFrom(credential.data)
-                val user = UserProfile(
-                    id = googleIdTokenCredential.id,
-                    displayName = googleIdTokenCredential.displayName ?: googleIdTokenCredential.id.substringBefore("@").replaceFirstChar { it.uppercase() },
-                    email = googleIdTokenCredential.id,
-                    phoneNumber = googleIdTokenCredential.phoneNumber,
-                    authMethod = AuthMethod.GOOGLE
-                )
-                saveUserToPrefs(user)
-                Result.success(user)
+                val idToken = googleIdTokenCredential.idToken
+
+                val firebaseCred = GoogleAuthProvider.getCredential(idToken, null)
+                val authResult = auth.signInWithCredential(firebaseCred).await()
+                val firebaseUser = authResult.user
+
+                if (firebaseUser != null) {
+                    val profile = UserProfile(
+                        id = firebaseUser.uid,
+                        displayName = firebaseUser.displayName ?: googleIdTokenCredential.displayName ?: "Camper",
+                        email = firebaseUser.email ?: googleIdTokenCredential.id,
+                        phoneNumber = firebaseUser.phoneNumber,
+                        authMethod = AuthMethod.GOOGLE
+                    )
+                    _currentUser.value = profile
+
+                    // Sync to Firestore users collection
+                    saveUserProfileToFirestore(profile)
+
+                    Result.success(profile)
+                } else {
+                    Result.failure(Exception("Failed to obtain Firebase user session."))
+                }
             } else {
-                Result.failure(Exception("Please enter your Google account to sign in."))
+                Result.failure(Exception("Unsupported credential type received."))
             }
-        } catch (e: Throwable) {
-            Log.i("AuthRepository", "CredentialManager: ${e.message}")
+        } catch (e: GetCredentialCancellationException) {
+            Log.w(TAG, "User cancelled Google Sign-In dialog.", e)
+            Result.failure(Exception("Sign-in was cancelled."))
+        } catch (e: GetCredentialException) {
+            Log.e(TAG, "Credential Manager error: ${e.message}", e)
+            Result.failure(e)
+        } catch (e: Exception) {
+            Log.e(TAG, "Authentication failed: ${e.message}", e)
             Result.failure(e)
         }
     }
 
-    fun signInWithEmail(
-        email: String,
-        vehicleHeight: String? = null,
-        vehicleWeight: String? = null,
-        vehicleModel: String? = null,
-        licensePlate: String? = null
-    ): Result<UserProfile> {
-        val cleanEmail = email.trim()
-        if (cleanEmail.isBlank() || !cleanEmail.contains("@") || !cleanEmail.contains(".")) {
-            return Result.failure(Exception("Please enter a valid email address."))
-        }
-        val defaultName = cleanEmail.substringBefore("@")
-            .replace(".", " ")
-            .replace("_", " ")
-            .split(" ")
-            .filter { it.isNotBlank() }
-            .joinToString(" ") { part -> part.replaceFirstChar { it.uppercase() } }
-            .ifBlank { "Camper" }
+    /**
+     * Silent / Auto Sign-In attempt using GetGoogleIdOption
+     */
+    suspend fun trySilentSignIn(activity: Activity): Result<UserProfile> {
+        val serverClientId = context.getString(R.string.default_web_client_id)
+        val credentialManager = CredentialManager.create(activity)
 
-        val user = UserProfile(
-            id = "user_" + UUID.randomUUID().toString().take(8),
-            displayName = defaultName,
-            email = cleanEmail,
-            phoneNumber = null,
-            authMethod = AuthMethod.EMAIL_OTP,
-            vehicleHeight = vehicleHeight?.trim()?.ifBlank { null },
-            vehicleWeight = vehicleWeight?.trim()?.ifBlank { null },
-            vehicleModel = vehicleModel?.trim()?.ifBlank { null },
-            licensePlate = licensePlate?.trim()?.ifBlank { null }
-        )
-        saveUserToPrefs(user)
-        return Result.success(user)
+        val silentOption = GetGoogleIdOption.Builder()
+            .setFilterByAuthorizedAccounts(true)
+            .setServerClientId(serverClientId)
+            .setAutoSelectEnabled(true)
+            .build()
+
+        val request = GetCredentialRequest.Builder()
+            .addCredentialOption(silentOption)
+            .build()
+
+        return try {
+            val result = credentialManager.getCredential(
+                request = request,
+                context = activity
+            )
+            val credential = result.credential
+            if (credential.type == GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
+                val googleIdTokenCredential = GoogleIdTokenCredential.createFrom(credential.data)
+                val firebaseCred = GoogleAuthProvider.getCredential(googleIdTokenCredential.idToken, null)
+                val authResult = auth.signInWithCredential(firebaseCred).await()
+                val firebaseUser = authResult.user
+                if (firebaseUser != null) {
+                    val profile = UserProfile(
+                        id = firebaseUser.uid,
+                        displayName = firebaseUser.displayName ?: "Camper",
+                        email = firebaseUser.email,
+                        phoneNumber = firebaseUser.phoneNumber,
+                        authMethod = AuthMethod.GOOGLE
+                    )
+                    _currentUser.value = profile
+                    fetchUserProfileFromFirestore(firebaseUser.uid)
+                    Result.success(profile)
+                } else {
+                    Result.failure(Exception("No user session"))
+                }
+            } else {
+                Result.failure(Exception("Not authorized"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
     }
 
-    fun updateVehicleInfo(
+    suspend fun updateVehicleInfo(
         vehicleHeight: String?,
         vehicleWeight: String?,
         vehicleModel: String?,
@@ -358,35 +199,39 @@ class AuthRepository(private val context: Context) {
             vehicleModel = vehicleModel?.trim()?.ifBlank { null },
             licensePlate = licensePlate?.trim()?.ifBlank { null }
         )
-        saveUserToPrefs(updated)
+        _currentUser.value = updated
+        saveUserProfileToFirestore(updated)
     }
 
-    fun directGoogleSignIn(email: String, displayName: String = ""): Result<UserProfile> {
-        val cleanEmail = email.trim()
-        if (cleanEmail.isBlank() || !cleanEmail.contains("@")) {
-            return Result.failure(Exception("Please enter a valid Google email address."))
-        }
-        val defaultName = cleanEmail.substringBefore("@").replace(".", " ").split(" ")
-            .joinToString(" ") { part -> part.replaceFirstChar { it.uppercase() } }
-        val finalDisplayName = displayName.trim().ifBlank { defaultName }
-
-        val user = UserProfile(
-            id = "google_" + UUID.randomUUID().toString().take(8),
-            displayName = finalDisplayName,
-            email = cleanEmail,
-            authMethod = AuthMethod.GOOGLE
+    private fun saveUserProfileToFirestore(user: UserProfile) {
+        val data = hashMapOf<String, Any>(
+            "userId" to user.id,
+            "displayName" to user.displayName,
+            "updatedAt" to FieldValue.serverTimestamp()
         )
-        saveUserToPrefs(user)
-        return Result.success(user)
+        user.email?.let { data["email"] = it }
+        user.vehicleModel?.let { data["vehicleModel"] = it }
+        user.vehicleHeight?.let { data["vehicleHeight"] = it }
+        user.vehicleWeight?.let { data["vehicleWeight"] = it }
+        user.licensePlate?.let { data["licensePlate"] = it }
+
+        db.collection("users").document(user.id)
+            .set(data, com.google.firebase.firestore.SetOptions.merge())
+            .addOnFailureListener { e ->
+                Log.w(TAG, "Failed to persist user profile to Firestore: ${e.message}")
+            }
     }
 
     fun signOut() {
         try {
-            getFirebaseAuth()?.signOut()
+            auth.signOut()
         } catch (e: Exception) {
-            Log.w("AuthRepository", "Error signing out of Firebase Auth: ${e.message}")
+            Log.w(TAG, "Sign out error: ${e.message}")
         }
-        prefs.edit().clear().apply()
         _currentUser.value = null
+    }
+
+    companion object {
+        private const val TAG = "AuthRepository"
     }
 }

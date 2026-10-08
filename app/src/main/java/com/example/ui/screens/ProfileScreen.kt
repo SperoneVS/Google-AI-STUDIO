@@ -14,12 +14,15 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.AuthMethod
+import com.example.data.model.UnitSystem
 import com.example.ui.viewmodel.CampsiteViewModel
+import com.example.util.Park4NightHelper
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -31,8 +34,10 @@ fun ProfileScreen(
         viewModel.navigateBack()
     }
 
+    val context = LocalContext.current
     val user by viewModel.currentUser.collectAsState()
     val campsites by viewModel.filteredCampsites.collectAsState()
+    val unitSystem by viewModel.unitSystem.collectAsState()
     val savedCount = campsites.count { it.isBookmarked }
     val userCreatedCount = campsites.count { it.isUserCreated }
 
@@ -46,7 +51,12 @@ fun ProfileScreen(
         modifier = modifier.fillMaxSize(),
         topBar = {
             TopAppBar(
-                title = { Text("Camper Profile", fontSize = 18.sp, fontWeight = FontWeight.Bold) },
+                title = {
+                    Column {
+                        Text("Camper Profile", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                        Text("Made by Victor", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                },
                 navigationIcon = {
                     IconButton(
                         onClick = { viewModel.navigateBack() },
@@ -75,7 +85,7 @@ fun ProfileScreen(
                 modifier = Modifier.size(80.dp)
             ) {
                 Box(contentAlignment = Alignment.Center) {
-                    val initial = user?.displayName?.firstOrNull()?.uppercase() ?: "C"
+                    val initial = user?.displayName?.firstOrNull()?.uppercase() ?: "V"
                     Text(
                         text = initial,
                         fontSize = 32.sp,
@@ -87,13 +97,13 @@ fun ProfileScreen(
 
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
-                    text = user?.displayName ?: "Camper",
+                    text = user?.displayName ?: "Victor (Camper Explorer)",
                     fontSize = 20.sp,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface
                 )
 
-                val identifier = user?.phoneNumber ?: user?.email ?: "Verified Explorer"
+                val identifier = user?.email?.ifBlank { null } ?: user?.phoneNumber?.ifBlank { null } ?: "csperone@gmx.net"
                 Text(
                     text = identifier,
                     fontSize = 13.sp,
@@ -118,12 +128,7 @@ fun ProfileScreen(
                         )
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(
-                            text = when (user?.authMethod) {
-                                AuthMethod.PHONE_OTP -> "Phone Verified (Firebase SMS)"
-                                AuthMethod.EMAIL_OTP -> "Email OTP Verified"
-                                AuthMethod.GOOGLE -> "Google Authenticated"
-                                null -> "Verified Camper"
-                            },
+                            text = "CampHaven Verified Explorer • Made by Victor",
                             fontSize = 11.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = Color(0xFF2E7D32)
@@ -174,13 +179,13 @@ fun ProfileScreen(
 
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(
-                            text = "Level 1",
+                            text = "Pro",
                             fontSize = 20.sp,
                             fontWeight = FontWeight.Bold,
-                            color = Color(0xFFF57C00)
+                            color = Color(0xFF2E7D32)
                         )
                         Text(
-                            text = "Camp Scout",
+                            text = "Park4night",
                             fontSize = 12.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -188,29 +193,122 @@ fun ProfileScreen(
                 }
             }
 
-            // Authentication Details Card
+            // METRIC SYSTEM PREFERENCE (European Metric vs American Imperial)
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
             ) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("Account & Security", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.Straighten,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Measurement Metrics", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                        }
+
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = MaterialTheme.colorScheme.primaryContainer
+                        ) {
+                            Text(
+                                text = unitSystem.label,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+
+                    Text(
+                        text = "Choose whether you prefer European metrics (km, meters, kg, €) or American imperial units (miles, feet, lbs, $).",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
+                            onClick = { viewModel.setUnitSystem(UnitSystem.METRIC) },
+                            modifier = Modifier.weight(1f),
+                            colors = if (unitSystem == UnitSystem.METRIC) {
+                                ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                            } else {
+                                ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant, contentColor = MaterialTheme.colorScheme.onSurface)
+                            }
+                        ) {
+                            Text("🇪🇺 European Metric", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+
+                        Button(
+                            onClick = { viewModel.setUnitSystem(UnitSystem.IMPERIAL) },
+                            modifier = Modifier.weight(1f),
+                            colors = if (unitSystem == UnitSystem.IMPERIAL) {
+                                ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                            } else {
+                                ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant, contentColor = MaterialTheme.colorScheme.onSurface)
+                            }
+                        ) {
+                            Text("🇺🇸 American Imperial", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+
+            // PRIVATE PARK4NIGHT ACCOUNT CARD
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFFF1F8E9))
+            ) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("🌲", fontSize = 18.sp)
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Park4night Integration", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = Color(0xFF1B5E20))
+                        }
+
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = Color(0xFF2E7D32)
+                        ) {
+                            Text(
+                                text = "Pro Connected",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Text("Sign-In Method", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("Active Camper Account", fontSize = 13.sp, color = Color(0xFF2E7D32))
                         Text(
-                            text = when (user?.authMethod) {
-                                AuthMethod.PHONE_OTP -> "Firebase Phone SMS OTP"
-                                AuthMethod.EMAIL_OTP -> "Email OTP"
-                                AuthMethod.GOOGLE -> "Google Identity"
-                                null -> "CampHaven Member"
-                            },
+                            text = Park4NightHelper.getConnectedEmail(context),
                             fontSize = 13.sp,
-                            fontWeight = FontWeight.SemiBold
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF1B5E20)
                         )
                     }
 
@@ -218,21 +316,34 @@ fun ProfileScreen(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Text("Member Since", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text(user?.memberSince ?: "2026", fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                        Text("Session Privacy", fontSize = 13.sp, color = Color(0xFF2E7D32))
+                        Text("Private on Device Only", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF1B5E20))
                     }
 
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = Color.White.copy(alpha = 0.7f)
                     ) {
-                        Text("Google Maps Sync", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text("Active", fontSize = 13.sp, color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold)
+                        Text(
+                            text = "🔒 Privacy Protection: Your login data, password, and vehicle specs are strictly kept in your private on-device vault and are NEVER shared or visible to other users of the app.",
+                            fontSize = 11.sp,
+                            color = Color(0xFF2E7D32),
+                            modifier = Modifier.padding(8.dp)
+                        )
+                    }
+
+                    Button(
+                        onClick = { Park4NightHelper.openPark4NightPortal(context) },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(10.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32))
+                    ) {
+                        Text("Launch Park4night Portal", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                     }
                 }
             }
 
-            // Camper Rig & Vehicle Specifications Card
+            // Camper Rig & Vehicle Specifications Card (STRICTLY PRIVATE)
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -257,7 +368,7 @@ fun ProfileScreen(
                                 modifier = Modifier.size(18.dp)
                             )
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("Camper Rig Specifications", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                            Text("Private Vehicle Specs", fontWeight = FontWeight.Bold, fontSize = 15.sp)
                         }
 
                         TextButton(
@@ -277,7 +388,7 @@ fun ProfileScreen(
                     }
 
                     Text(
-                        text = "Used to check road clearance, bridge height, and pad weight limits at campsites.",
+                        text = "Confidential to you. Used for bridge height clearances and campsite vehicle pad fit checks.",
                         fontSize = 11.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -287,7 +398,7 @@ fun ProfileScreen(
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Text("Vehicle Model", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text(user?.vehicleModel ?: "Not specified", fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                        Text(user?.vehicleModel?.ifBlank { null } ?: "Campervan / Van", fontSize = 13.sp, fontWeight = FontWeight.Medium)
                     }
 
                     Row(
@@ -295,15 +406,15 @@ fun ProfileScreen(
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Text("Clearance Height", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text(user?.vehicleHeight ?: "Not specified", fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                        Text(user?.vehicleHeight?.ifBlank { null } ?: "2.8 m (Standard)", fontSize = 13.sp, fontWeight = FontWeight.Medium)
                     }
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Text("Vehicle Weight", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text(user?.vehicleWeight ?: "Not specified", fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                        Text("Gross Pad Weight", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(user?.vehicleWeight?.ifBlank { null } ?: "3,500 kg (Class B)", fontSize = 13.sp, fontWeight = FontWeight.Medium)
                     }
 
                     Row(
@@ -311,107 +422,110 @@ fun ProfileScreen(
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Text("License Plate", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text(user?.licensePlate ?: "Not specified", fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                        Text(user?.licensePlate?.ifBlank { null } ?: "Private", fontSize = 13.sp, fontWeight = FontWeight.Medium)
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.weight(1f))
+            // About / Creator Attribution
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
+            ) {
+                Column(modifier = Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = "CampHaven",
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = "Made by Victor",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "Essential Sleep, Water & Power camping index with Google Maps and Park4night navigation.",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        lineHeight = 16.sp
+                    )
+                }
+            }
 
-            // Sign Out Button
-            Button(
-                onClick = {
-                    viewModel.signOut()
-                    viewModel.navigateBack()
-                },
+            // Sign out button
+            OutlinedButton(
+                onClick = { viewModel.signOut() },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(48.dp)
                     .testTag("sign_out_btn"),
-                shape = RoundedCornerShape(12.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
             ) {
-                Icon(Icons.Default.ExitToApp, contentDescription = null)
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("Sign Out", fontWeight = FontWeight.Bold)
+                Icon(Icons.Default.ExitToApp, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("Sign Out")
             }
         }
     }
 
+    // Edit Vehicle Dialog (Confidential)
     if (showEditVehicleDialog) {
         AlertDialog(
             onDismissRequest = { showEditVehicleDialog = false },
-            title = {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.DirectionsCar, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Edit Rig Specifications", fontSize = 17.sp, fontWeight = FontWeight.Bold)
-                }
-            },
+            title = { Text("Edit Private Vehicle Specs") },
             text = {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(
-                        text = "Specify your vehicle parameters to verify campsite height and weight restrictions.",
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        text = "These details stay on your private profile only and are NEVER shared with other users.",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.primary
                     )
 
                     OutlinedTextField(
                         value = editModel,
                         onValueChange = { editModel = it },
-                        label = { Text("Vehicle Model") },
-                        placeholder = { Text("e.g. Ford Transit Custom") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth().testTag("edit_model_input")
+                        label = { Text("Vehicle Model (e.g. VW California, Fiat Ducato)") },
+                        modifier = Modifier.fillMaxWidth()
                     )
 
                     OutlinedTextField(
                         value = editHeight,
                         onValueChange = { editHeight = it },
-                        label = { Text("Vehicle Height") },
-                        placeholder = { Text("e.g. 8 ft 4 in") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth().testTag("edit_height_input")
+                        label = { Text("Height (e.g. 2.8 m or 9 ft)") },
+                        modifier = Modifier.fillMaxWidth()
                     )
 
                     OutlinedTextField(
                         value = editWeight,
                         onValueChange = { editWeight = it },
-                        label = { Text("Vehicle Weight") },
-                        placeholder = { Text("e.g. 6,200 lbs") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth().testTag("edit_weight_input")
+                        label = { Text("Weight (e.g. 3500 kg or 7700 lbs)") },
+                        modifier = Modifier.fillMaxWidth()
                     )
 
                     OutlinedTextField(
                         value = editPlate,
                         onValueChange = { editPlate = it },
-                        label = { Text("License Plate") },
-                        placeholder = { Text("e.g. CAMP-777") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth().testTag("edit_plate_input")
+                        label = { Text("License Plate (Private)") },
+                        modifier = Modifier.fillMaxWidth()
                     )
                 }
             },
             confirmButton = {
                 Button(
                     onClick = {
-                        viewModel.updateVehicleInfo(
-                            vehicleHeight = editHeight.ifBlank { null },
-                            vehicleWeight = editWeight.ifBlank { null },
-                            vehicleModel = editModel.ifBlank { null },
-                            licensePlate = editPlate.ifBlank { null }
+                        viewModel.updateCamperVehicleProfile(
+                            vehicleModel = editModel,
+                            vehicleHeight = editHeight,
+                            vehicleWeight = editWeight,
+                            licensePlate = editPlate
                         )
                         showEditVehicleDialog = false
-                    },
-                    modifier = Modifier.testTag("save_rig_specs_btn")
+                    }
                 ) {
-                    Text("Save Specs")
+                    Text("Save Privately")
                 }
             },
             dismissButton = {

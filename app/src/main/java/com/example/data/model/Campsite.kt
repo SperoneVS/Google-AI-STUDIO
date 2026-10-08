@@ -90,6 +90,10 @@ data class Campsite(
     val terrainType: String, // Mountain, Alpine Lake, Redwoods, Canyon, Desert
     val description: String,
     val insiderTips: String,
+    val photoUrl: String = "",
+    val photoUrls: List<String> = emptyList(),
+    val isPark4NightVerified: Boolean = false,
+    val park4NightNote: String = "",
     val limits: CampsiteLimits = CampsiteLimits(),
     val isBookmarked: Boolean = false,
     val isUserCreated: Boolean = false
