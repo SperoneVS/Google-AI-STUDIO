@@ -64,6 +64,28 @@ fun DetailScreen(
     val distance = viewModel.getDistanceToSiteMiles(campsite)
     val detailedInfo = remember(campsite) { CampsiteDetailFactory.createDetailedInfo(campsite) }
 
+    val currentUser by viewModel.currentUser.collectAsState()
+    val reviews by viewModel.getReviewsForCampsite(campsite.id).collectAsState(initial = emptyList())
+
+    var showReviewDialog by remember { mutableStateOf(false) }
+    var ratingStars by remember { mutableStateOf(5) }
+    var isWaterAvailable by remember { mutableStateOf(campsite.water.sourceType != com.example.data.model.WaterSourceType.NO_WATER) }
+    var waterStatusLabel by remember { mutableStateOf(campsite.water.sourceType.label) }
+    var isEnergyAvailable by remember { mutableStateOf(campsite.energy.sourceType.hasGridPower) }
+    var energyStatusLabel by remember { mutableStateOf(campsite.energy.sourceType.label) }
+    var reviewNotes by remember { mutableStateOf("") }
+
+    var showLimitsDialog by remember { mutableStateOf(false) }
+    var testRigHeightText by remember { mutableStateOf(currentUser?.vehicleHeight ?: "") }
+    var testRigWeightText by remember { mutableStateOf(currentUser?.vehicleWeight ?: "") }
+    var testGroupSize by remember { mutableStateOf(2) }
+    var testStayNights by remember { mutableStateOf(2) }
+    var customEvaluationResult by remember { mutableStateOf<com.example.ui.viewmodel.CampsiteLimitsEvaluation?>(null) }
+
+    val defaultEvaluation = remember(campsite, currentUser) {
+        viewModel.evaluateCampsiteLimits(campsite)
+    }
+
     Scaffold(
         modifier = modifier.fillMaxSize(),
         topBar = {
@@ -357,6 +379,381 @@ fun DetailScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
+            // ----------------------------------------------------
+            // SECTION: CAMPSITE LIMITS & RIG FIT CHECKER
+            // ----------------------------------------------------
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp)
+                    .testTag("campsite_limits_card"),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.DirectionsCar,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Campsite Limits & Rig Clearance",
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+
+                        TextButton(
+                            onClick = {
+                                testRigHeightText = currentUser?.vehicleHeight ?: ""
+                                testRigWeightText = currentUser?.vehicleWeight ?: ""
+                                testGroupSize = 2
+                                testStayNights = 2
+                                customEvaluationResult = null
+                                showLimitsDialog = true
+                            },
+                            modifier = Modifier.testTag("check_limits_btn")
+                        ) {
+                            Icon(Icons.Default.Tune, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Test Rig Fit", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+
+                    Text(
+                        text = "Official terrain and pitch restrictions for vehicles, rigs, stay duration, and party size.",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    // Limits Grid
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Surface(
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(10.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                        ) {
+                            Column(modifier = Modifier.padding(10.dp)) {
+                                Text("Max Height", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("${campsite.limits.maxVehicleHeightFt} ft", fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                                Text("Clearance limit", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+
+                        Surface(
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(10.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                        ) {
+                            Column(modifier = Modifier.padding(10.dp)) {
+                                Text("Max Weight", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("${campsite.limits.maxVehicleWeightLbs} lbs", fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                                Text("Pad rating", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+
+                        Surface(
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(10.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                        ) {
+                            Column(modifier = Modifier.padding(10.dp)) {
+                                Text("Max Stay", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("${campsite.limits.maxStayNights} Days", fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                                Text("Limit nights", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                    }
+
+                    // Secondary limits row
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = "Max Group: ${campsite.limits.maxPeople} campers | Pad Length: ${campsite.limits.maxVehicleLengthFt} ft",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            text = "Quiet: ${campsite.limits.quietHours}",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+
+                    // Live rig comparison evaluation banner
+                    val evalToDisplay = customEvaluationResult ?: defaultEvaluation
+                    val bannerColor = if (evalToDisplay.isAllCleared) Color(0xFFE8F5E9) else Color(0xFFFFF3E0)
+                    val contentColor = if (evalToDisplay.isAllCleared) Color(0xFF2E7D32) else Color(0xFFE65100)
+
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = bannerColor,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = if (evalToDisplay.isAllCleared) Icons.Default.CheckCircle else Icons.Default.Warning,
+                                    contentDescription = null,
+                                    tint = contentColor,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = evalToDisplay.summaryVerdict,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.sp,
+                                    color = contentColor
+                                )
+                            }
+
+                            currentUser?.vehicleModel?.let { model ->
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = "Your Rig: $model ${currentUser?.licensePlate?.let { "[$it]" } ?: ""}",
+                                    fontSize = 11.sp,
+                                    color = contentColor.copy(alpha = 0.9f)
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(6.dp))
+
+                            evalToDisplay.items.forEach { item ->
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "${item.title}:",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(
+                                            text = item.rigSpec,
+                                            fontSize = 11.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Icon(
+                                            imageVector = if (item.isCompliant) Icons.Default.Check else Icons.Default.Close,
+                                            contentDescription = null,
+                                            tint = if (item.isCompliant) Color(0xFF2E7D32) else Color(0xFFD32F2F),
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // ----------------------------------------------------
+            // SECTION: CAMPER RATINGS & POST-VISIT AMENITIES VERIFICATION
+            // ----------------------------------------------------
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp)
+                    .testTag("campsite_reviews_card"),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.Star,
+                                    contentDescription = null,
+                                    tint = Color(0xFFFFB300),
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "Post-Visit Ratings & Reports",
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                            Text(
+                                text = "Verified reports on water and energy hookups",
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+
+                        Button(
+                            onClick = { showReviewDialog = true },
+                            shape = RoundedCornerShape(10.dp),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                            modifier = Modifier.testTag("rate_campsite_btn")
+                        ) {
+                            Icon(Icons.Default.RateReview, contentDescription = null, modifier = Modifier.size(14.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Rate Visit", fontSize = 12.sp)
+                        }
+                    }
+
+                    if (reviews.isEmpty()) {
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(16.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Text(
+                                    text = "No field visit reviews logged yet.",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = "Have you camped here? Add your rating and confirm if water and energy were available!",
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    lineHeight = 15.sp
+                                )
+                            }
+                        }
+                    } else {
+                        reviews.forEach { rev ->
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(12.dp),
+                                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = rev.camperName,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 13.sp
+                                        )
+
+                                        // Stars display
+                                        Row {
+                                            repeat(rev.ratingStars) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Star,
+                                                    contentDescription = null,
+                                                    tint = Color(0xFFFFB300),
+                                                    modifier = Modifier.size(14.dp)
+                                                )
+                                            }
+                                        }
+                                    }
+
+                                    // Water and energy verification badges
+                                    Row(
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Surface(
+                                            shape = RoundedCornerShape(6.dp),
+                                            color = if (rev.isWaterAvailable) Color(0xFFE1F5FE) else Color(0xFFFFEBEE)
+                                        ) {
+                                            Row(
+                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Icon(
+                                                    imageVector = if (rev.isWaterAvailable) Icons.Default.WaterDrop else Icons.Default.WaterDrop,
+                                                    contentDescription = null,
+                                                    tint = if (rev.isWaterAvailable) Color(0xFF0288D1) else Color(0xFFC62828),
+                                                    modifier = Modifier.size(12.dp)
+                                                )
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Text(
+                                                    text = if (rev.isWaterAvailable) "Water: Available (${rev.waterStatusLabel})" else "Water: Dry / None",
+                                                    fontSize = 10.sp,
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    color = if (rev.isWaterAvailable) Color(0xFF0288D1) else Color(0xFFC62828)
+                                                )
+                                            }
+                                        }
+
+                                        Surface(
+                                            shape = RoundedCornerShape(6.dp),
+                                            color = if (rev.isEnergyAvailable) Color(0xFFFFF8E1) else Color(0xFFECEFF1)
+                                        ) {
+                                            Row(
+                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Icon(
+                                                    imageVector = if (rev.isEnergyAvailable) Icons.Default.Bolt else Icons.Default.PowerOff,
+                                                    contentDescription = null,
+                                                    tint = if (rev.isEnergyAvailable) Color(0xFFF57F17) else Color(0xFF546E7A),
+                                                    modifier = Modifier.size(12.dp)
+                                                )
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Text(
+                                                    text = if (rev.isEnergyAvailable) "Energy: Available (${rev.energyStatusLabel})" else "Energy: Off-Grid",
+                                                    fontSize = 10.sp,
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    color = if (rev.isEnergyAvailable) Color(0xFFF57F17) else Color(0xFF546E7A)
+                                                )
+                                            }
+                                        }
+                                    }
+
+                                    if (rev.notes.isNotBlank()) {
+                                        Text(
+                                            text = "\"${rev.notes}\"",
+                                            fontSize = 12.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
             // Connectivity & Coordinates Card
             Card(
                 modifier = Modifier
@@ -416,5 +813,284 @@ fun DetailScreen(
 
             Spacer(modifier = Modifier.height(32.dp))
         }
+    }
+
+    // ----------------------------------------------------
+    // DIALOG: POST-VISIT RATING & WATER/ENERGY QUESTIONS
+    // ----------------------------------------------------
+    if (showReviewDialog) {
+        AlertDialog(
+            onDismissRequest = { showReviewDialog = false },
+            title = {
+                Text(
+                    text = "Rate Visit to ${campsite.name}",
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text(
+                        text = "1. Overall Rating after your visit:",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+
+                    // Star Selector
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        (1..5).forEach { star ->
+                            IconButton(
+                                onClick = { ratingStars = star },
+                                modifier = Modifier.size(40.dp)
+                            ) {
+                                Icon(
+                                    imageVector = if (star <= ratingStars) Icons.Default.Star else Icons.Outlined.StarBorder,
+                                    contentDescription = "$star stars",
+                                    tint = if (star <= ratingStars) Color(0xFFFFB300) else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(32.dp)
+                                )
+                            }
+                        }
+                    }
+
+                    HorizontalDivider()
+
+                    // QUESTION 1: WATER AVAILABILITY
+                    Text(
+                        text = "2. Was clean water available during your stay?",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = if (isWaterAvailable) "Water WAS Available" else "Water UNAVAILABLE / Dry",
+                            fontSize = 12.sp,
+                            color = if (isWaterAvailable) Color(0xFF0288D1) else Color(0xFFC62828),
+                            fontWeight = FontWeight.Bold
+                        )
+                        Switch(
+                            checked = isWaterAvailable,
+                            onCheckedChange = { isWaterAvailable = it }
+                        )
+                    }
+
+                    if (isWaterAvailable) {
+                        Text("Water Source Status:", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            listOf("Potable Tap", "Alpine Spring", "River (Filter)", "Bring Own").forEach { label ->
+                                FilterChip(
+                                    selected = waterStatusLabel.contains(label, ignoreCase = true),
+                                    onClick = { waterStatusLabel = label },
+                                    label = { Text(label, fontSize = 11.sp) }
+                                )
+                            }
+                        }
+                    }
+
+                    HorizontalDivider()
+
+                    // QUESTION 2: ENERGY AVAILABILITY
+                    Text(
+                        text = "3. Was electricity / energy hookup available?",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = if (isEnergyAvailable) "Energy Hookup WAS Available" else "Off-Grid / No Electricity",
+                            fontSize = 12.sp,
+                            color = if (isEnergyAvailable) Color(0xFFF57F17) else Color(0xFF546E7A),
+                            fontWeight = FontWeight.Bold
+                        )
+                        Switch(
+                            checked = isEnergyAvailable,
+                            onCheckedChange = { isEnergyAvailable = it }
+                        )
+                    }
+
+                    if (isEnergyAvailable) {
+                        Text("Hookup Type Status:", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            listOf("30A/50A Shore", "120V Outlet", "Solar Prime", "USB Station").forEach { label ->
+                                FilterChip(
+                                    selected = energyStatusLabel.contains(label, ignoreCase = true),
+                                    onClick = { energyStatusLabel = label },
+                                    label = { Text(label, fontSize = 11.sp) }
+                                )
+                            }
+                        }
+                    }
+
+                    HorizontalDivider()
+
+                    // Field notes
+                    OutlinedTextField(
+                        value = reviewNotes,
+                        onValueChange = { reviewNotes = it },
+                        label = { Text("Camper Field Notes & Tips") },
+                        placeholder = { Text("e.g. Bring extra water filter; shady spot on site 4") },
+                        modifier = Modifier.fillMaxWidth(),
+                        minLines = 2
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.submitCampsiteReview(
+                            campsiteId = campsite.id,
+                            ratingStars = ratingStars,
+                            isWaterAvailable = isWaterAvailable,
+                            waterStatusLabel = waterStatusLabel,
+                            isEnergyAvailable = isEnergyAvailable,
+                            energyStatusLabel = energyStatusLabel,
+                            notes = reviewNotes
+                        )
+                        showReviewDialog = false
+                    },
+                    modifier = Modifier.testTag("submit_review_dialog_btn")
+                ) {
+                    Text("Submit Review")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showReviewDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    // ----------------------------------------------------
+    // DIALOG: TEST RIG LIMITS & TRIP RESTRICTIONS
+    // ----------------------------------------------------
+    if (showLimitsDialog) {
+        AlertDialog(
+            onDismissRequest = { showLimitsDialog = false },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Tune, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Test Rig Limits Compatibility", fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                }
+            },
+            text = {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text(
+                        text = "Enter your vehicle specs to check clearance and weight limits at ${campsite.name}.",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    OutlinedTextField(
+                        value = testRigHeightText,
+                        onValueChange = { testRigHeightText = it },
+                        label = { Text("Vehicle Height") },
+                        placeholder = { Text("e.g. 8 ft 4 in or 9.0") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth().testTag("test_rig_height_input")
+                    )
+
+                    OutlinedTextField(
+                        value = testRigWeightText,
+                        onValueChange = { testRigWeightText = it },
+                        label = { Text("Vehicle Weight") },
+                        placeholder = { Text("e.g. 6,500 lbs") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth().testTag("test_rig_weight_input")
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedTextField(
+                            value = testStayNights.toString(),
+                            onValueChange = { testStayNights = it.toIntOrNull() ?: 1 },
+                            label = { Text("Nights Stay") },
+                            singleLine = true,
+                            modifier = Modifier.weight(1f)
+                        )
+
+                        OutlinedTextField(
+                            value = testGroupSize.toString(),
+                            onValueChange = { testGroupSize = it.toIntOrNull() ?: 1 },
+                            label = { Text("Campers") },
+                            singleLine = true,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                    ) {
+                        Column(modifier = Modifier.padding(10.dp)) {
+                            Text(
+                                text = "Site Limits: Height max ${campsite.limits.maxVehicleHeightFt} ft | Weight max ${campsite.limits.maxVehicleWeightLbs} lbs | Stay max ${campsite.limits.maxStayNights} nights",
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val parsedHeight = testRigHeightText.replace("ft", "").replace("'", ".").filter { it.isDigit() || it == '.' }.toDoubleOrNull()
+                        val parsedWeight = testRigWeightText.filter { it.isDigit() }.toIntOrNull()
+
+                        val result = viewModel.evaluateCampsiteLimits(
+                            campsite = campsite,
+                            customHeightFt = parsedHeight,
+                            customWeightLbs = parsedWeight,
+                            groupSize = testGroupSize,
+                            stayNights = testStayNights
+                        )
+                        customEvaluationResult = result
+
+                        // If user has no vehicle info saved yet or updated it, save to profile
+                        viewModel.updateVehicleInfo(
+                            vehicleHeight = testRigHeightText.ifBlank { null },
+                            vehicleWeight = testRigWeightText.ifBlank { null },
+                            vehicleModel = currentUser?.vehicleModel,
+                            licensePlate = currentUser?.licensePlate
+                        )
+
+                        showLimitsDialog = false
+                    },
+                    modifier = Modifier.testTag("apply_limits_test_btn")
+                ) {
+                    Text("Verify Rig")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showLimitsDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 }

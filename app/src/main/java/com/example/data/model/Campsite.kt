@@ -61,6 +61,18 @@ data class EnergyDetails(
     val hasEvCharging: Boolean
 )
 
+data class CampsiteLimits(
+    val maxVehicleHeightFt: Double = 12.0, // Clearance in feet
+    val maxVehicleWeightLbs: Int = 10000, // Pad limit in lbs
+    val maxVehicleLengthFt: Int = 30, // Max RV/van pad length in feet
+    val maxStayNights: Int = 14,
+    val maxPeople: Int = 6,
+    val quietHours: String = "10:00 PM - 7:00 AM",
+    val generatorAllowed: Boolean = false,
+    val generatorHours: String = "8:00 AM - 8:00 PM",
+    val fireRestrictions: String = "Designated steel rings only"
+)
+
 data class Campsite(
     val id: String,
     val name: String,
@@ -78,6 +90,7 @@ data class Campsite(
     val terrainType: String, // Mountain, Alpine Lake, Redwoods, Canyon, Desert
     val description: String,
     val insiderTips: String,
+    val limits: CampsiteLimits = CampsiteLimits(),
     val isBookmarked: Boolean = false,
     val isUserCreated: Boolean = false
 )

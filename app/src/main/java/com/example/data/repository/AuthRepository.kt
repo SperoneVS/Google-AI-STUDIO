@@ -67,15 +67,23 @@ class AuthRepository(private val context: Context) {
         val name = prefs.getString("user_display_name", "Camper") ?: "Camper"
         val phone = prefs.getString("user_phone", null)
         val email = prefs.getString("user_email", null)
-        val methodStr = prefs.getString("user_auth_method", AuthMethod.PHONE_OTP.name)
-        val method = runCatching { AuthMethod.valueOf(methodStr!!) }.getOrDefault(AuthMethod.PHONE_OTP)
+        val methodStr = prefs.getString("user_auth_method", AuthMethod.EMAIL_OTP.name)
+        val method = runCatching { AuthMethod.valueOf(methodStr!!) }.getOrDefault(AuthMethod.EMAIL_OTP)
+        val vModel = prefs.getString("user_vehicle_model", null)
+        val vHeight = prefs.getString("user_vehicle_height", null)
+        val vWeight = prefs.getString("user_vehicle_weight", null)
+        val lPlate = prefs.getString("user_license_plate", null)
 
         return UserProfile(
             id = id,
             displayName = name,
             phoneNumber = phone,
             email = email,
-            authMethod = method
+            authMethod = method,
+            vehicleModel = vModel,
+            vehicleHeight = vHeight,
+            vehicleWeight = vWeight,
+            licensePlate = lPlate
         )
     }
 
@@ -87,6 +95,10 @@ class AuthRepository(private val context: Context) {
             putString("user_phone", user.phoneNumber)
             putString("user_email", user.email)
             putString("user_auth_method", user.authMethod.name)
+            putString("user_vehicle_model", user.vehicleModel)
+            putString("user_vehicle_height", user.vehicleHeight)
+            putString("user_vehicle_weight", user.vehicleWeight)
+            putString("user_license_plate", user.licensePlate)
             apply()
         }
         _currentUser.value = user
@@ -297,6 +309,56 @@ class AuthRepository(private val context: Context) {
             Log.i("AuthRepository", "CredentialManager: ${e.message}")
             Result.failure(e)
         }
+    }
+
+    fun signInWithEmail(
+        email: String,
+        vehicleHeight: String? = null,
+        vehicleWeight: String? = null,
+        vehicleModel: String? = null,
+        licensePlate: String? = null
+    ): Result<UserProfile> {
+        val cleanEmail = email.trim()
+        if (cleanEmail.isBlank() || !cleanEmail.contains("@") || !cleanEmail.contains(".")) {
+            return Result.failure(Exception("Please enter a valid email address."))
+        }
+        val defaultName = cleanEmail.substringBefore("@")
+            .replace(".", " ")
+            .replace("_", " ")
+            .split(" ")
+            .filter { it.isNotBlank() }
+            .joinToString(" ") { part -> part.replaceFirstChar { it.uppercase() } }
+            .ifBlank { "Camper" }
+
+        val user = UserProfile(
+            id = "user_" + UUID.randomUUID().toString().take(8),
+            displayName = defaultName,
+            email = cleanEmail,
+            phoneNumber = null,
+            authMethod = AuthMethod.EMAIL_OTP,
+            vehicleHeight = vehicleHeight?.trim()?.ifBlank { null },
+            vehicleWeight = vehicleWeight?.trim()?.ifBlank { null },
+            vehicleModel = vehicleModel?.trim()?.ifBlank { null },
+            licensePlate = licensePlate?.trim()?.ifBlank { null }
+        )
+        saveUserToPrefs(user)
+        return Result.success(user)
+    }
+
+    fun updateVehicleInfo(
+        vehicleHeight: String?,
+        vehicleWeight: String?,
+        vehicleModel: String?,
+        licensePlate: String?
+    ) {
+        val current = _currentUser.value ?: return
+        val updated = current.copy(
+            vehicleHeight = vehicleHeight?.trim()?.ifBlank { null },
+            vehicleWeight = vehicleWeight?.trim()?.ifBlank { null },
+            vehicleModel = vehicleModel?.trim()?.ifBlank { null },
+            licensePlate = licensePlate?.trim()?.ifBlank { null }
+        )
+        saveUserToPrefs(updated)
     }
 
     fun directGoogleSignIn(email: String, displayName: String = ""): Result<UserProfile> {

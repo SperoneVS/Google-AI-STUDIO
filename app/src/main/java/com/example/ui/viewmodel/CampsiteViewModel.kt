@@ -152,6 +152,7 @@ class CampsiteViewModel(application: Application) : AndroidViewModel(application
     init {
         viewModelScope.launch {
             repository.seedInitialGear()
+            repository.seedInitialCampsites()
         }
     }
 
@@ -241,7 +242,7 @@ class CampsiteViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    fun setUserLocation(lat: Double, lng: Double, label: String = "Live GPS Location") {
+    fun setUserLocation(lat: Double, lng: Double, label: String = "Nearby Foothills") {
         _userCoordinates.value = Pair(lat, lng)
         _filterState.value = _filterState.value.copy(
             areaLabel = label,
@@ -255,7 +256,7 @@ class CampsiteViewModel(application: Application) : AndroidViewModel(application
     /**
      * Auto Find in the user's current area
      */
-    fun triggerAutoFindInArea(lat: Double, lng: Double, areaLabel: String = "Your Local Area") {
+    fun triggerAutoFindInArea(lat: Double, lng: Double, areaLabel: String = "Sierra Foothills") {
         _userCoordinates.value = Pair(lat, lng)
         _filterState.value = _filterState.value.copy(
             isAutoFindActive = true,
@@ -274,12 +275,19 @@ class CampsiteViewModel(application: Application) : AndroidViewModel(application
             }
 
             if (nearby.isEmpty()) {
-                // Dynamically create 3 realistic area wilderness spots with Sleep, Water, and Energy specs
+                val cleanRegion = if (areaName.contains("Live", ignoreCase = true) ||
+                    areaName.contains("Location", ignoreCase = true) ||
+                    areaName.contains("GPS", ignoreCase = true)) {
+                    "Sierra Foothills"
+                } else {
+                    areaName
+                }
+
                 val localSite1 = Campsite(
                     id = "auto_area_1_${userLat.toInt()}_${userLon.toInt()}",
-                    name = "$areaName Valley Campground",
-                    region = areaName,
-                    stateOrCountry = "Local Wilderness District",
+                    name = "Pine Valley Campground",
+                    region = cleanRegion,
+                    stateOrCountry = "Wilderness District",
                     latitude = userLat + 0.045,
                     longitude = userLon - 0.032,
                     feePerNight = "$15 / night",
@@ -313,15 +321,15 @@ class CampsiteViewModel(application: Application) : AndroidViewModel(application
                     ),
                     cellReceptionBars = 4,
                     terrainType = "Pine Valley",
-                    description = "Local haven auto-located near your coordinates. Equipped with clean potable water, shaded tent pitches, and device charging pedestals.",
+                    description = "Mountain haven nestled along pine flats. Equipped with clean potable water, shaded tent pitches, and device charging pedestals.",
                     insiderTips = "Sites along the creek have continuous running water sounds for sleeping.",
                     isUserCreated = false
                 )
 
                 val localSite2 = Campsite(
                     id = "auto_area_2_${userLat.toInt()}_${userLon.toInt()}",
-                    name = "$areaName Ridge Off-Grid Haven",
-                    region = areaName,
+                    name = "Eagle Ridge Off-Grid Haven",
+                    region = cleanRegion,
                     stateOrCountry = "Wilderness Reserve",
                     latitude = userLat - 0.065,
                     longitude = userLon + 0.055,
@@ -410,12 +418,163 @@ class CampsiteViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
+    fun signInWithEmail(
+        email: String,
+        vehicleHeight: String? = null,
+        vehicleWeight: String? = null,
+        vehicleModel: String? = null,
+        licensePlate: String? = null
+    ): Result<UserProfile> {
+        return authRepository.signInWithEmail(
+            email = email,
+            vehicleHeight = vehicleHeight,
+            vehicleWeight = vehicleWeight,
+            vehicleModel = vehicleModel,
+            licensePlate = licensePlate
+        )
+    }
+
+    fun updateVehicleInfo(
+        vehicleHeight: String?,
+        vehicleWeight: String?,
+        vehicleModel: String?,
+        licensePlate: String?
+    ) {
+        authRepository.updateVehicleInfo(vehicleHeight, vehicleWeight, vehicleModel, licensePlate)
+    }
+
     fun directGoogleSignIn(email: String, displayName: String = ""): Result<UserProfile> {
         return authRepository.directGoogleSignIn(email, displayName)
     }
 
     fun signOut() {
         authRepository.signOut()
+    }
+
+    fun getReviewsForCampsite(campsiteId: String): Flow<List<com.example.data.local.CampsiteReviewEntity>> {
+        return repository.getReviewsFlow(campsiteId)
+    }
+
+    fun submitCampsiteReview(
+        campsiteId: String,
+        ratingStars: Int,
+        isWaterAvailable: Boolean,
+        waterStatusLabel: String,
+        isEnergyAvailable: Boolean,
+        energyStatusLabel: String,
+        notes: String
+    ) {
+        viewModelScope.launch {
+            val user = currentUser.value
+            val review = com.example.data.local.CampsiteReviewEntity(
+                campsiteId = campsiteId,
+                camperName = user?.displayName?.ifBlank { "Verified Camper" } ?: "Verified Camper",
+                camperEmail = user?.email ?: user?.phoneNumber ?: "",
+                ratingStars = ratingStars,
+                isWaterAvailable = isWaterAvailable,
+                waterStatusLabel = waterStatusLabel,
+                isEnergyAvailable = isEnergyAvailable,
+                energyStatusLabel = energyStatusLabel,
+                notes = notes
+            )
+            repository.submitReview(review)
+        }
+    }
+
+    fun evaluateCampsiteLimits(
+        campsite: Campsite,
+        customHeightFt: Double? = null,
+        customWeightLbs: Int? = null,
+        groupSize: Int = 2,
+        stayNights: Int = 2
+    ): CampsiteLimitsEvaluation {
+        val user = currentUser.value
+
+        val rigHeight: Double = customHeightFt ?: parseHeightToFeet(user?.vehicleHeight) ?: 8.0
+        val maxClearance = campsite.limits.maxVehicleHeightFt
+        val heightPass = rigHeight <= maxClearance
+
+        val rigWeight: Int = customWeightLbs ?: parseWeightToLbs(user?.vehicleWeight) ?: 6000
+        val maxWeight = campsite.limits.maxVehicleWeightLbs
+        val weightPass = rigWeight <= maxWeight
+
+        val maxNights = campsite.limits.maxStayNights
+        val nightsPass = stayNights <= maxNights
+
+        val maxCapacity = campsite.limits.maxPeople
+        val peoplePass = groupSize <= maxCapacity
+
+        val items = listOf(
+            LimitCheckItem(
+                title = "Vehicle Clearance Height",
+                limitSpec = "Max clearance: ${maxClearance} ft",
+                rigSpec = "Your rig: ${String.format("%.1f", rigHeight)} ft",
+                isCompliant = heightPass,
+                note = if (heightPass) "Fits under branch canopy & clearance gates" else "EXCEEDS height clearance by ${String.format("%.1f", rigHeight - maxClearance)} ft!"
+            ),
+            LimitCheckItem(
+                title = "Pad / Road Weight Capacity",
+                limitSpec = "Max rating: ${maxWeight} lbs",
+                rigSpec = "Your rig: ${rigWeight} lbs",
+                isCompliant = weightPass,
+                note = if (weightPass) "Safe for gravel/dirt pad weight" else "EXCEEDS pad limit by ${rigWeight - maxWeight} lbs!"
+            ),
+            LimitCheckItem(
+                title = "Planned Stay Duration",
+                limitSpec = "Max limit: $maxNights nights",
+                rigSpec = "Your plan: $stayNights nights",
+                isCompliant = nightsPass,
+                note = if (nightsPass) "Within maximum consecutive camping allowance" else "EXCEEDS maximum allowable stay limit!"
+            ),
+            LimitCheckItem(
+                title = "Camp Group Size",
+                limitSpec = "Max limit: $maxCapacity campers",
+                rigSpec = "Your party: $groupSize campers",
+                isCompliant = peoplePass,
+                note = if (peoplePass) "Pitch footprint accommodates group" else "Party exceeds designated site occupancy limit!"
+            )
+        )
+
+        val warnings = items.count { !it.isCompliant }
+        val allClear = warnings == 0
+        val verdict = if (allClear) "All Limits Cleared - Safe for Arrival" else "$warnings Limit Warning(s) - Review Rig Specs"
+
+        return CampsiteLimitsEvaluation(
+            isAllCleared = allClear,
+            items = items,
+            warningCount = warnings,
+            summaryVerdict = verdict
+        )
+    }
+
+    private fun parseHeightToFeet(raw: String?): Double? {
+        if (raw.isNullOrBlank()) return null
+        return try {
+            val clean = raw.lowercase().trim()
+            if (clean.contains("ft") || clean.contains("'")) {
+                val ftPart = clean.substringBefore("ft").substringBefore("'").trim().toDoubleOrNull() ?: 0.0
+                val inPart = if (clean.contains("in")) {
+                    clean.substringAfter("ft").substringAfter("'").substringBefore("in").trim().toDoubleOrNull() ?: 0.0
+                } else if (clean.contains("\"")) {
+                    clean.substringAfter("'").substringBefore("\"").trim().toDoubleOrNull() ?: 0.0
+                } else 0.0
+                ftPart + (inPart / 12.0)
+            } else {
+                clean.filter { it.isDigit() || it == '.' }.toDoubleOrNull()
+            }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun parseWeightToLbs(raw: String?): Int? {
+        if (raw.isNullOrBlank()) return null
+        return try {
+            val digits = raw.filter { it.isDigit() }
+            if (digits.isNotEmpty()) digits.toInt() else null
+        } catch (_: Exception) {
+            null
+        }
     }
 
     fun getDistanceToSiteMiles(site: Campsite): Double {
@@ -436,3 +595,18 @@ class CampsiteViewModel(application: Application) : AndroidViewModel(application
         }
     }
 }
+
+data class LimitCheckItem(
+    val title: String,
+    val limitSpec: String,
+    val rigSpec: String,
+    val isCompliant: Boolean,
+    val note: String
+)
+
+data class CampsiteLimitsEvaluation(
+    val isAllCleared: Boolean,
+    val items: List<LimitCheckItem>,
+    val warningCount: Int,
+    val summaryVerdict: String
+)

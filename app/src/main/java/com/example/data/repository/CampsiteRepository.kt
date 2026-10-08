@@ -329,11 +329,23 @@ class CampsiteRepository(private val database: AppDatabase) {
     }
 
     suspend fun addCustomCampsite(campsite: Campsite) {
-        dao.insertCustomCampsite(campsite.toEntity())
+        val cleanSite = campsite.copy(name = cleanCampsiteName(campsite.name))
+        dao.insertCustomCampsite(cleanSite.toEntity())
+        dao.insertCampsite(cleanSite.toRoomCampsite())
     }
 
     suspend fun deleteCustomCampsite(id: String) {
         dao.deleteCustomCampsite(id)
+        dao.deleteCampsite(id)
+    }
+
+    suspend fun seedInitialCampsites() {
+        val roomEntities = curatedCampsites.map { it.toRoomCampsite() }
+        dao.insertAllCampsites(roomEntities)
+    }
+
+    fun getAllRoomCampsitesFlow(): Flow<List<com.example.data.local.Campsite>> {
+        return dao.getAllCampsites()
     }
 
     // Default Gear Items
@@ -394,13 +406,58 @@ class CampsiteRepository(private val database: AppDatabase) {
         )
         dao.insertGearItem(newEntity)
     }
+
+    fun getReviewsFlow(campsiteId: String): Flow<List<com.example.data.local.CampsiteReviewEntity>> {
+        return dao.getReviewsForCampsite(campsiteId)
+    }
+
+    suspend fun submitReview(review: com.example.data.local.CampsiteReviewEntity) {
+        dao.insertReview(review)
+    }
+}
+
+fun cleanCampsiteName(rawName: String): String {
+    return rawName
+        .replace(Regex("(?i)live\\s*gps\\s*location"), "Pine Valley")
+        .replace(Regex("(?i)live\\s*location"), "Pine Valley")
+        .replace(Regex("(?i)live\\s*gps"), "Pine Valley")
+        .replace(Regex("(?i)live"), "")
+        .trim()
+        .ifBlank { "Wilderness Haven" }
 }
 
 // Extension mappers
+fun Campsite.toRoomCampsite(): com.example.data.local.Campsite {
+    return com.example.data.local.Campsite(
+        id = id,
+        name = cleanCampsiteName(name),
+        sleepingSetup = sleep.type.label,
+        waterAvailability = water.sourceType.label,
+        energyHookupStatus = energy.sourceType.label,
+        region = region,
+        stateOrCountry = stateOrCountry,
+        latitude = latitude,
+        longitude = longitude,
+        feePerNight = feePerNight,
+        rating = rating,
+        reviewCount = reviewCount,
+        terrainType = terrainType,
+        description = description,
+        maxVehicleHeightFt = limits.maxVehicleHeightFt,
+        maxVehicleWeightLbs = limits.maxVehicleWeightLbs,
+        maxVehicleLengthFt = limits.maxVehicleLengthFt,
+        maxStayNights = limits.maxStayNights,
+        maxPeople = limits.maxPeople,
+        isUserCreated = isUserCreated
+    )
+}
+
 private fun CampsiteEntity.toDomainModel(): Campsite {
+    val cleanName = cleanCampsiteName(name)
+
     return Campsite(
         id = id,
-        name = name,
+        name = cleanName,
         region = region,
         stateOrCountry = stateOrCountry,
         latitude = latitude,

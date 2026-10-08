@@ -61,6 +61,13 @@ fun AddCampsiteScreen(
     var description by remember { mutableStateOf("") }
     var insiderTips by remember { mutableStateOf("") }
 
+    // Campsite Limits & Regulations
+    var maxVehicleHeightText by remember { mutableStateOf("12.0") }
+    var maxVehicleWeightText by remember { mutableStateOf("10000") }
+    var maxVehicleLengthText by remember { mutableStateOf("30") }
+    var maxStayNightsText by remember { mutableStateOf("14") }
+    var maxPeopleText by remember { mutableStateOf("6") }
+
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
     Scaffold(
@@ -346,6 +353,54 @@ fun AddCampsiteScreen(
                 }
             }
 
+            // Section 5: Campsite Limits & Vehicle Regulations
+            Card(
+                shape = RoundedCornerShape(14.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+            ) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.DirectionsCar, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Campsite Limits & Rig Regulations", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                    }
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(
+                            value = maxVehicleHeightText,
+                            onValueChange = { maxVehicleHeightText = it },
+                            label = { Text("Max Height (ft)") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                            modifier = Modifier.weight(1f)
+                        )
+                        OutlinedTextField(
+                            value = maxVehicleWeightText,
+                            onValueChange = { maxVehicleWeightText = it },
+                            label = { Text("Max Weight (lbs)") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(
+                            value = maxStayNightsText,
+                            onValueChange = { maxStayNightsText = it },
+                            label = { Text("Max Stay (Nights)") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            modifier = Modifier.weight(1f)
+                        )
+                        OutlinedTextField(
+                            value = maxPeopleText,
+                            onValueChange = { maxPeopleText = it },
+                            label = { Text("Max Campers") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+            }
+
             // Submit Button
             Button(
                 onClick = {
@@ -358,9 +413,24 @@ fun AddCampsiteScreen(
                     val elev = elevationText.toIntOrNull() ?: 4000
                     val dist = waterDistanceText.toIntOrNull() ?: 20
 
+                    // Clean and sanitize name: delete any 'live location' / 'Live Location'
+                    val sanitizedName = name
+                        .replace(Regex("(?i)live\\s*gps\\s*location"), "Pine Valley")
+                        .replace(Regex("(?i)live\\s*location"), "Pine Valley")
+                        .replace(Regex("(?i)live\\s*gps"), "Pine Valley")
+                        .replace(Regex("(?i)live"), "")
+                        .trim()
+                        .ifBlank { "Wilderness Haven" }
+
+                    val parsedMaxHeight = maxVehicleHeightText.toDoubleOrNull() ?: 12.0
+                    val parsedMaxWeight = maxVehicleWeightText.toIntOrNull() ?: 10000
+                    val parsedMaxLen = maxVehicleLengthText.toIntOrNull() ?: 30
+                    val parsedMaxStay = maxStayNightsText.toIntOrNull() ?: 14
+                    val parsedMaxPeople = maxPeopleText.toIntOrNull() ?: 6
+
                     val newCampsite = Campsite(
                         id = "user_camp_" + UUID.randomUUID().toString().take(8),
-                        name = name.trim(),
+                        name = sanitizedName,
                         region = region.trim(),
                         stateOrCountry = stateOrCountry.trim(),
                         latitude = lat,
@@ -371,7 +441,7 @@ fun AddCampsiteScreen(
                         sleep = SleepDetails(
                             type = selectedSleepType,
                             groundType = selectedGroundType,
-                            maxCapacity = 6,
+                            maxCapacity = parsedMaxPeople,
                             hammockFriendly = hammockFriendly,
                             shadeRating = 4,
                             quietHours = "10:00 PM - 7:00 AM",
@@ -393,6 +463,13 @@ fun AddCampsiteScreen(
                             campfireRing = campfireRing,
                             firewoodPurchasable = firewoodPurchasable,
                             hasEvCharging = false
+                        ),
+                        limits = CampsiteLimits(
+                            maxVehicleHeightFt = parsedMaxHeight,
+                            maxVehicleWeightLbs = parsedMaxWeight,
+                            maxVehicleLengthFt = parsedMaxLen,
+                            maxStayNights = parsedMaxStay,
+                            maxPeople = parsedMaxPeople
                         ),
                         cellReceptionBars = 2,
                         terrainType = terrainType,
