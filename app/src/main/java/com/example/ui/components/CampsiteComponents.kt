@@ -132,7 +132,7 @@ fun CampsiteCard(
 
                     Spacer(modifier = Modifier.width(6.dp))
 
-                    // Park4night verified badge
+                    // Verified community camper stop badge
                     if (campsite.isPark4NightVerified) {
                         Surface(
                             shape = RoundedCornerShape(8.dp),
@@ -143,7 +143,7 @@ fun CampsiteCard(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
-                                    text = "🌲 Park4night",
+                                    text = "🌲 Verified Spot",
                                     color = Color.White,
                                     fontSize = 10.sp,
                                     fontWeight = FontWeight.Bold
@@ -336,7 +336,7 @@ fun CampsiteCard(
                     )
                 }
 
-                // Park4night verified info strip with direct deep link
+                // Verified camper stop info strip with direct navigation link
                 if (campsite.isPark4NightVerified) {
                     Spacer(modifier = Modifier.height(8.dp))
                     Surface(
@@ -357,8 +357,12 @@ fun CampsiteCard(
                                 fontSize = 12.sp
                             )
                             Spacer(modifier = Modifier.width(6.dp))
+                            val cleanNote = campsite.park4NightNote
+                                .replace("Park4night #", "Spot #")
+                                .replace("Park4night", "Camper Hub")
+                                .ifBlank { "Verified European camper stop" }
                             Text(
-                                text = if (campsite.park4NightNote.isNotBlank()) campsite.park4NightNote else "Park4night verified camper stop",
+                                text = cleanNote,
                                 fontSize = 11.sp,
                                 color = Color(0xFF1B5E20),
                                 fontWeight = FontWeight.Medium,
@@ -369,7 +373,7 @@ fun CampsiteCard(
                             if (onOpenPark4Night != null) {
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
-                                    text = "Park4night ↗",
+                                    text = "Camp Portal ↗",
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = Color(0xFF2E7D32),
@@ -377,7 +381,7 @@ fun CampsiteCard(
                                         .clickable { onOpenPark4Night() }
                                         .padding(horizontal = 4.dp, vertical = 2.dp)
                                         .testTag("card_open_p4n_${campsite.id}")
-                                )
+                                 )
                             }
                         }
                     }

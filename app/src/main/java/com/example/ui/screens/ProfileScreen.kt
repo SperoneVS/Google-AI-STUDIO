@@ -103,12 +103,14 @@ fun ProfileScreen(
                     color = MaterialTheme.colorScheme.onSurface
                 )
 
-                val identifier = user?.email?.ifBlank { null } ?: user?.phoneNumber?.ifBlank { null } ?: "csperone@gmx.net"
-                Text(
-                    text = identifier,
-                    fontSize = 13.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                val identifier = user?.email?.ifBlank { null } ?: user?.phoneNumber?.ifBlank { null }
+                if (!identifier.isNullOrBlank()) {
+                    Text(
+                        text = identifier,
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
 
                 Spacer(modifier = Modifier.height(6.dp))
 
@@ -303,9 +305,9 @@ fun ProfileScreen(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Text("Active Camper Account", fontSize = 13.sp, color = Color(0xFF2E7D32))
+                        Text("Account Status", fontSize = 13.sp, color = Color(0xFF2E7D32))
                         Text(
-                            text = Park4NightHelper.getConnectedEmail(context),
+                            text = "Connected (Vault Protected)",
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color(0xFF1B5E20)

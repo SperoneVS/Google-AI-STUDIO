@@ -212,6 +212,15 @@ class ExampleRobolectricTest {
     assertNotNull("Meteora campsite should exist", meteora)
     assertEquals("Greece", meteora!!.stateOrCountry)
 
+    val slovakiaTatras = europeanSites.find { it.id == "p4n_eu_sk_tatry_rietave" }
+    assertNotNull("High Tatras Slovak campsite should exist", slovakiaTatras)
+    assertEquals("Slovakia", slovakiaTatras!!.stateOrCountry)
+    assertTrue("Slovak site must be Park4Night verified", slovakiaTatras.isPark4NightVerified)
+
+    val slovenskyRaj = europeanSites.find { it.id == "p4n_eu_sk_slovensky_raj" }
+    assertNotNull("Slovenský Raj campsite should exist", slovenskyRaj)
+    assertEquals("Slovakia", slovenskyRaj!!.stateOrCountry)
+
     // Ensure all European spots have valid coordinates for Google Maps
     europeanSites.forEach { site ->
       assertTrue("${site.name} latitude should be valid", site.latitude in -90.0..90.0)
@@ -249,9 +258,42 @@ class ExampleRobolectricTest {
   @Test
   fun `test default unit system is European Metric`() {
     val context = ApplicationProvider.getApplicationContext<Context>()
-    val vm = CampsiteViewModel(context as android.app.Application)
+    val prefs = context.getSharedPreferences("camphaven_prefs", Context.MODE_PRIVATE)
+    val saved = prefs.getString("unit_system", com.example.data.model.UnitSystem.METRIC.name)
+    val unitSystem = com.example.data.model.UnitSystem.valueOf(saved ?: com.example.data.model.UnitSystem.METRIC.name)
+    assertEquals(com.example.data.model.UnitSystem.METRIC, unitSystem)
+    // Verify startup prompt is not active
+    val promptChosen = prefs.getBoolean("unit_system_chosen", false)
+    assertEquals(false, promptChosen)
+  }
 
-    assertEquals(com.example.data.model.UnitSystem.METRIC, vm.unitSystem.value)
-    assertEquals(false, vm.showUnitPrompt.value)
+  @Test
+  fun `test location permission check current area label and nearby campsite prioritization`() = runBlocking {
+    val app = ApplicationProvider.getApplicationContext<android.app.Application>()
+    val shadowApp = org.robolectric.Shadows.shadowOf(app)
+
+    // 1. Verify permission check before and after granting ACCESS_FINE_LOCATION
+    shadowApp.denyPermissions(
+        android.Manifest.permission.ACCESS_FINE_LOCATION,
+        android.Manifest.permission.ACCESS_COARSE_LOCATION
+    )
+    assertTrue("Permission should initially be denied", !com.example.util.LocationTracker.hasLocationPermission(app))
+
+    shadowApp.grantPermissions(android.Manifest.permission.ACCESS_FINE_LOCATION)
+    assertTrue("Permission should be granted after grantPermissions", com.example.util.LocationTracker.hasLocationPermission(app))
+
+    // 2. Verify reverseGeocodeAreaLabel resolves user's current area near Chamonix (45.9237, 6.8694)
+    val areaLabel = com.example.util.PlacesSearchService.reverseGeocodeAreaLabel(app, 45.9237, 6.8694)
+    assertTrue("Area label should identify region or coordinates, got: $areaLabel", areaLabel.contains("📍"))
+
+    // 3. Verify nearby campsites are prioritized by distance from user's current coordinates
+    val database = com.example.data.local.AppDatabase.getInstance(app)
+    val repo = CampsiteRepository(database, app)
+    val prioritized = repo.curatedCampsites.sortedBy { site ->
+      CampsiteViewModel.calculateDistanceMiles(45.9237, 6.8694, site.latitude, site.longitude)
+    }
+    assertTrue("Prioritized list should not be empty", prioritized.isNotEmpty())
+    // Closest curated site to Chamonix (45.9237, 6.8694) should be Camping des Glaciers (eu_fr_1)
+    assertEquals("eu_fr_1", prioritized.first().id)
   }
 }

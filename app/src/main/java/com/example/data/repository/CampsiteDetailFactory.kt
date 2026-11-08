@@ -1,6 +1,8 @@
 package com.example.data.repository
 
 import com.example.data.model.*
+import com.example.util.GoogleMapsHelper
+import com.example.util.MapTilerHelper
 
 object CampsiteDetailFactory {
 
@@ -12,7 +14,9 @@ object CampsiteDetailFactory {
         val latMin = ((Math.abs(campsite.latitude) - Math.abs(latDeg)) * 60).toInt()
         val lonDeg = campsite.longitude.toInt()
         val lonMin = ((Math.abs(campsite.longitude) - Math.abs(lonDeg)) * 60).toInt()
-        val dms = "${latDeg}°${latMin}'N, ${Math.abs(lonDeg)}°${lonMin}'W"
+        val latDir = if (campsite.latitude >= 0) "N" else "S"
+        val lonDir = if (campsite.longitude >= 0) "E" else "W"
+        val dms = "${Math.abs(latDeg)}°${latMin}'$latDir, ${Math.abs(lonDeg)}°${lonMin}'$lonDir"
 
         return CampsiteDetailedInfo(
             campsite = campsite,
@@ -21,7 +25,7 @@ object CampsiteDetailFactory {
             seasonality = if (campsite.sleep.elevationFt > 6000) "May 15 - October 31 (Snowpack dependent)" else "Year-Round Access",
             maxStayNights = 14,
             petPolicy = if (campsite.terrainType == "Desert Canyon") "Pets restricted on rim trails for safety" else "Leashed pets welcome (6-ft max leash)",
-            wasteDisposal = if (campsite.feePerNight.contains("Free")) "Pack-it-in, Pack-it-out (Leave No Trace)" else "Bear-proof waste dumpsters & recycling on-site",
+            wasteDisposal = if (campsite.feePerNight.contains("Free")) "Pack-it-in, Pack-it-out (Leave No Trace)" else "Waste dumpsters, grey/black water station & recycling on-site",
             restroomType = if (campsite.water.hasHotShowers) "Heated flush restrooms with private stalls" else if (campsite.water.sourceType == WaterSourceType.NO_WATER) "Primitive pack-out bags or remote pit toilet" else "Clean ventilated vault toilets",
             checkInCheckOut = "Check-in: 2:00 PM • Check-out: 11:00 AM",
             coordinatesFormatted = dms,
@@ -35,49 +39,88 @@ object CampsiteDetailFactory {
         val isDesert = campsite.terrainType.contains("Desert")
         val isCoast = campsite.terrainType.contains("Coastal")
 
-        return listOf(
+        val primaryImg = campsite.photoUrls.getOrNull(0)?.ifBlank { null } ?: campsite.photoUrl
+        val secondaryImg = campsite.photoUrls.getOrNull(1)?.ifBlank { null } ?: primaryImg
+        val mapTilerTopoUrl = MapTilerHelper.getStaticMapUrl(
+            latitude = campsite.latitude,
+            longitude = campsite.longitude,
+            zoom = 13.5,
+            style = MapTilerHelper.MapTilerStyle.OUTDOOR
+        )
+        val mapTilerSatelliteUrl = MapTilerHelper.getStaticMapUrl(
+            latitude = campsite.latitude,
+            longitude = campsite.longitude,
+            zoom = 14.5,
+            style = MapTilerHelper.MapTilerStyle.HYBRID
+        )
+
+        val satelliteUrl = mapTilerSatelliteUrl ?: GoogleMapsHelper.getStaticMapUrl(
+            latitude = campsite.latitude,
+            longitude = campsite.longitude,
+            zoom = 15,
+            mapType = "hybrid"
+        ) ?: primaryImg
+
+        val streetOrTerrainUrl = mapTilerTopoUrl ?: GoogleMapsHelper.getStreetViewUrl(
+            latitude = campsite.latitude,
+            longitude = campsite.longitude
+        ) ?: GoogleMapsHelper.getStaticMapUrl(
+            latitude = campsite.latitude,
+            longitude = campsite.longitude,
+            zoom = 13,
+            mapType = "terrain"
+        ) ?: secondaryImg
+
+        val photoList = mutableListOf(
             CampsitePhoto(
                 id = "${campsite.id}_p1",
                 caption = "Level ${campsite.sleep.groundType.label.lowercase()} pitch with direct mountain sunrise view",
-                photographer = "Elena Rostova • Verified Camper",
+                photographer = "Verified Camper Community",
                 tag = PhotoTag.TENT_PITCH,
                 timeOfDay = "Golden Hour (7:15 AM)",
                 gradientColors = if (isDesert) listOf(0xFF8B4513, 0xFFD2691E, 0xFFF4A460)
                                  else if (isCoast) listOf(0xFF1D3557, 0xFF457B9D, 0xFFA8DADC)
                                  else listOf(0xFF1B4332, 0xFF2D6A4F, 0xFF52B788),
-                dominantIcon = "tent"
+                dominantIcon = "tent",
+                imageUrl = primaryImg
             ),
             CampsitePhoto(
                 id = "${campsite.id}_p2",
+                caption = if (mapTilerTopoUrl != null) "MapTiler Outdoor Topographic & Contour Map (${campsite.latitude}, ${campsite.longitude})"
+                          else "Satellite & Hybrid Aerial View (${campsite.latitude}, ${campsite.longitude})",
+                photographer = if (mapTilerTopoUrl != null) "MapTiler Outdoor Topo API" else "Satellite Imagery API",
+                tag = PhotoTag.SCENIC_VIEWS,
+                timeOfDay = "Topographic Elevation Map",
+                gradientColors = listOf(0xFF1B4332, 0xFF2D6A4F, 0xFF40916C),
+                dominantIcon = "stars",
+                imageUrl = streetOrTerrainUrl
+            ),
+            CampsitePhoto(
+                id = "${campsite.id}_p3",
                 caption = if (isWaterRich) "${campsite.water.sourceType.label} flowing crisp and cold near site boundary"
-                          else "Dry canyon canyonlands view with hydration staging station",
-                photographer = "Marcus Vance • Backpacker",
+                          else "Scenic terrain view with hydration staging station",
+                photographer = "High-Res Aerial & Field View",
                 tag = PhotoTag.WATER_SOURCE,
                 timeOfDay = "Midday (12:30 PM)",
                 gradientColors = if (isWaterRich) listOf(0xFF0077B6, 0xFF0096C7, 0xFF48CAE4)
                                  else listOf(0xFFB08968, 0xFFDDB892, 0xFFEDE0D4),
-                dominantIcon = "water"
-            ),
-            CampsitePhoto(
-                id = "${campsite.id}_p3",
-                caption = if (campsite.energy.sourceType.hasGridPower) "Pedestal hookup with dual 120V GFI and shore power outlet"
-                          else "Unobstructed southern solar exposure index ${campsite.energy.solarExposureIndex}/10",
-                photographer = "Dave Sterling • Overlander",
-                tag = PhotoTag.ENERGY_SOLAR,
-                timeOfDay = "Afternoon (3:45 PM)",
-                gradientColors = listOf(0xFFD97706, 0xFFF59E0B, 0xFFFCD34D),
-                dominantIcon = "bolt"
+                dominantIcon = "water",
+                imageUrl = satelliteUrl
             ),
             CampsitePhoto(
                 id = "${campsite.id}_p4",
-                caption = "Campfire circle under certified International Dark-Sky Milky Way canopy",
-                photographer = "Aria Chen • Astrophotographer",
-                tag = PhotoTag.SCENIC_VIEWS,
-                timeOfDay = "Night Sky (10:15 PM)",
-                gradientColors = listOf(0xFF0B0C10, 0xFF1F2833, 0xFF45A29E),
-                dominantIcon = "stars"
+                caption = if (campsite.energy.sourceType.hasGridPower) "Pedestal hookup with 16A CEE / shore power outlet"
+                          else "Unobstructed southern solar exposure index ${campsite.energy.solarExposureIndex}/10",
+                photographer = "Verified Camper Community",
+                tag = PhotoTag.ENERGY_SOLAR,
+                timeOfDay = "Afternoon (3:45 PM)",
+                gradientColors = listOf(0xFFD97706, 0xFFF59E0B, 0xFFFCD34D),
+                dominantIcon = "bolt",
+                imageUrl = secondaryImg
             )
         )
+
+        return photoList
     }
 
     private fun generateAmenitiesForCampsite(campsite: Campsite): List<CampsiteAmenity> {

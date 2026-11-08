@@ -200,7 +200,7 @@ fun DetailScreen(
                                 color = Color(0xFF2E7D32)
                             ) {
                                 Text(
-                                    text = "🌲 Park4night Verified",
+                                    text = "🌲 Verified Camper Stop",
                                     color = Color.White,
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Bold,
@@ -287,7 +287,7 @@ fun DetailScreen(
                     Text("Maps", fontSize = 11.sp)
                 }
 
-                // Park4night button
+                // Direct navigation portal button
                 OutlinedButton(
                     onClick = {
                         Park4NightHelper.openSpotInPark4Night(
@@ -303,7 +303,7 @@ fun DetailScreen(
                     shape = RoundedCornerShape(12.dp),
                     colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF2E7D32))
                 ) {
-                    Text("🌲 Park4night", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFF2E7D32))
+                    Text("🌲 Camp Portal", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFF2E7D32))
                 }
 
                 OutlinedButton(
@@ -317,7 +317,7 @@ fun DetailScreen(
                 }
             }
 
-            // Google Maps & Park4night Field Verification Card
+            // Field Verification Card
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -345,13 +345,17 @@ fun DetailScreen(
                         Spacer(modifier = Modifier.width(10.dp))
                         Column {
                             Text(
-                                text = if (campsite.isPark4NightVerified) "Park4night & Google Maps Verified Spot" else "GPS Verified Field Coordinates",
+                                text = if (campsite.isPark4NightVerified) "Verified Camper Stop & GPS Coords" else "GPS Verified Field Coordinates",
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color(0xFF1B5E20)
                             )
+                            val cleanNote = campsite.park4NightNote
+                                .replace("Park4night #", "Spot #")
+                                .replace("Park4night", "Camper Hub")
+                                .ifBlank { "Accurate coordinates: ${campsite.latitude}, ${campsite.longitude}" }
                             Text(
-                                text = if (campsite.park4NightNote.isNotBlank()) campsite.park4NightNote else "Accurate coordinates: ${campsite.latitude}, ${campsite.longitude}",
+                                text = cleanNote,
                                 fontSize = 11.sp,
                                 color = Color(0xFF2E7D32)
                             )

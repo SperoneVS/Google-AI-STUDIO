@@ -53,26 +53,33 @@ fun ExploreScreen(
     val unitSystem by viewModel.unitSystem.collectAsState()
     val placeSuggestions by viewModel.placeSuggestions.collectAsState()
     val isSearchingPlaces by viewModel.isSearchingPlaces.collectAsState()
+    val hasLocationPermission by viewModel.hasLocationPermission.collectAsState()
 
     var showSortMenu by remember { mutableStateOf(false) }
     var showAreaMenu by remember { mutableStateOf(false) }
     var isLocating by remember { mutableStateOf(false) }
     var isSyncing by remember { mutableStateOf(false) }
 
-    // GPS Permission launcher for Auto-Find
+    LaunchedEffect(Unit) {
+        viewModel.refreshLocationPermissionState()
+    }
+
+    // GPS Permission launcher for Auto-Find & Current Area detection
     val locationLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
         val fineGranted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] ?: false
         val coarseGranted = permissions[Manifest.permission.ACCESS_COARSE_LOCATION] ?: false
-        if (fineGranted || coarseGranted) {
+        val granted = fineGranted || coarseGranted
+        viewModel.onLocationPermissionResult(granted)
+        if (granted) {
             isLocating = true
             LocationTracker.requestCurrentLocation(
                 context = context,
                 onSuccess = { lat, lon ->
                     isLocating = false
-                    viewModel.triggerAutoFindInArea(lat, lon, "Your GPS Location")
-                    Toast.makeText(context, "Location updated: campsites nearby loaded!", Toast.LENGTH_SHORT).show()
+                    viewModel.triggerAutoFindInArea(lat, lon, "📍 Detecting Current Area...")
+                    Toast.makeText(context, "Current area detected: prioritizing nearby campsites!", Toast.LENGTH_SHORT).show()
                 },
                 onFailure = { err ->
                     isLocating = false
@@ -80,19 +87,20 @@ fun ExploreScreen(
                 }
             )
         } else {
-            Toast.makeText(context, "Location permission not granted. You can pick European regions in 'Change Area'.", Toast.LENGTH_LONG).show()
+            Toast.makeText(context, "Location permission not granted. Showing European regions.", Toast.LENGTH_LONG).show()
         }
     }
 
     val triggerGpsAutoFind = {
         if (LocationTracker.hasLocationPermission(context)) {
+            viewModel.onLocationPermissionResult(true)
             isLocating = true
             LocationTracker.requestCurrentLocation(
                 context = context,
                 onSuccess = { lat, lon ->
                     isLocating = false
-                    viewModel.triggerAutoFindInArea(lat, lon, "Your GPS Location")
-                    Toast.makeText(context, "Loaded campsites near your position!", Toast.LENGTH_SHORT).show()
+                    viewModel.triggerAutoFindInArea(lat, lon, "📍 Detecting Current Area...")
+                    Toast.makeText(context, "Loaded campsites near your current area!", Toast.LENGTH_SHORT).show()
                 },
                 onFailure = { err ->
                     isLocating = false
@@ -412,6 +420,67 @@ fun ExploreScreen(
                 }
             }
 
+            // LOCATION PERMISSION PROMPT BANNER (shown when location permission is not yet granted)
+            AnimatedVisibility(
+                visible = !hasLocationPermission,
+                enter = expandVertically() + fadeIn(),
+                exit = shrinkVertically() + fadeOut()
+            ) {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 4.dp)
+                        .testTag("location_permission_banner"),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.85f)
+                    )
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.MyLocation,
+                                contentDescription = "Location Permission",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column {
+                                Text(
+                                    text = "Prioritize Nearby Campsites",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                                Text(
+                                    text = "Enable location access to display your current area and rank closest campsites first.",
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.85f)
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Button(
+                            onClick = { triggerGpsAutoFind() },
+                            modifier = Modifier.testTag("request_location_permission_btn"),
+                            shape = RoundedCornerShape(10.dp),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                        ) {
+                            Text("Enable GPS", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+
             // EUROPEAN AREA & GOOGLE MAPS CONTROLLER CARD
             Card(
                 modifier = Modifier
@@ -428,20 +497,49 @@ fun ExploreScreen(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f)
+                        ) {
                             Icon(
-                                imageVector = Icons.Default.Place,
+                                imageVector = if (filterState.isAutoFindActive) Icons.Default.MyLocation else Icons.Default.Place,
                                 contentDescription = null,
                                 tint = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.size(18.dp)
                             )
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = "Region: ${filterState.areaLabel}",
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
+                            Column {
+                                Text(
+                                    text = "Current Area: ${filterState.areaLabel}",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    modifier = Modifier.testTag("current_area_display")
+                                )
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        text = String.format(java.util.Locale.US, "%.3f° N, %.3f° E", userCoords.first, userCoords.second),
+                                        fontSize = 10.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    if (filterState.sortOption == CampsiteSortOption.DISTANCE) {
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Surface(
+                                            shape = RoundedCornerShape(6.dp),
+                                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
+                                            modifier = Modifier.testTag("nearby_priority_badge")
+                                        ) {
+                                            Text(
+                                                text = "Nearby Prioritized",
+                                                fontSize = 9.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = MaterialTheme.colorScheme.primary,
+                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
                         }
 
                         // Region Selector Dropdown
@@ -562,6 +660,13 @@ fun ExploreScreen(
                                     onClick = {
                                         showAreaMenu = false
                                         viewModel.setUserLocation(52.0167, 6.0028, "🇳🇱 Netherlands")
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("🇸🇰 Slovakia (High Tatras & Slovak Paradise)") },
+                                    onClick = {
+                                        showAreaMenu = false
+                                        viewModel.setUserLocation(49.0601, 20.0812, "🇸🇰 Slovakia (High Tatras)")
                                     }
                                 )
                                 Divider()
@@ -805,11 +910,11 @@ fun ExploreScreen(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Park4night toggle
+                // Verified spots toggle
                 FilterChip(
                     selected = filterState.park4NightOnly,
                     onClick = { viewModel.togglePark4NightOnly() },
-                    label = { Text("🌲 Park4night Spots") },
+                    label = { Text("🌲 Verified Stops") },
                     leadingIcon = {
                         if (filterState.park4NightOnly) {
                             Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(14.dp))

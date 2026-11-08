@@ -15,7 +15,8 @@ data class CampsitePhoto(
     val tag: PhotoTag,
     val timeOfDay: String,
     val gradientColors: List<Long>, // For rendering rich scenic photo illustrations
-    val dominantIcon: String = "landscape"
+    val dominantIcon: String = "landscape",
+    val imageUrl: String = ""
 )
 
 enum class AmenityCategory(val title: String) {

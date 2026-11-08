@@ -13,7 +13,6 @@ import android.net.Uri
 object Park4NightHelper {
 
     private const val PREFS_NAME = "private_camper_vault_prefs"
-    private const val KEY_P4N_EMAIL = "p4n_user_email"
     private const val KEY_P4N_ACTIVE = "p4n_is_active"
 
     private fun getPrefs(context: Context): SharedPreferences {
@@ -22,17 +21,12 @@ object Park4NightHelper {
 
     fun initPrivateAccount(context: Context) {
         val prefs = getPrefs(context)
-        if (!prefs.contains(KEY_P4N_EMAIL)) {
+        if (!prefs.contains(KEY_P4N_ACTIVE)) {
             // Securely initialize private profile on device only
             prefs.edit()
-                .putString(KEY_P4N_EMAIL, "csperone@gmx.net")
                 .putBoolean(KEY_P4N_ACTIVE, true)
                 .apply()
         }
-    }
-
-    fun getConnectedEmail(context: Context): String {
-        return getPrefs(context).getString(KEY_P4N_EMAIL, "csperone@gmx.net") ?: "csperone@gmx.net"
     }
 
     fun isConnected(context: Context): Boolean {

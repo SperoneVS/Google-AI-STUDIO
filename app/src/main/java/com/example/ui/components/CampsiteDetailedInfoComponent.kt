@@ -22,12 +22,14 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import coil.compose.AsyncImage
 import com.example.data.model.*
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -360,59 +362,86 @@ fun CampsiteDetailedInfoComponent(
                                     colors = photo.gradientColors.map { Color(it) }
                                 )
                             )
-                            .padding(14.dp)
                     ) {
-                        Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = Color.Black.copy(alpha = 0.5f),
-                            modifier = Modifier.align(Alignment.TopStart)
-                        ) {
-                            Text(
-                                text = photo.timeOfDay,
-                                color = Color.White,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                        if (photo.imageUrl.isNotBlank()) {
+                            AsyncImage(
+                                model = photo.imageUrl,
+                                contentDescription = photo.caption,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.fillMaxSize()
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .background(
+                                        Brush.verticalGradient(
+                                            colors = listOf(
+                                                Color.Black.copy(alpha = 0.35f),
+                                                Color.Transparent,
+                                                Color.Black.copy(alpha = 0.55f)
+                                            )
+                                        )
+                                    )
+                            )
+                        } else {
+                            // Center Icon Emblem fallback
+                            Icon(
+                                imageVector = when (photo.dominantIcon) {
+                                    "tent" -> Icons.Default.Bed
+                                    "water" -> Icons.Default.WaterDrop
+                                    "bolt" -> Icons.Default.Bolt
+                                    "stars" -> Icons.Default.Star
+                                    else -> Icons.Default.Landscape
+                                },
+                                contentDescription = null,
+                                tint = Color.White.copy(alpha = 0.35f),
+                                modifier = Modifier
+                                    .size(88.dp)
+                                    .align(Alignment.Center)
                             )
                         }
 
-                        IconButton(
-                            onClick = { expandedPhoto = null },
+                        Box(
                             modifier = Modifier
-                                .align(Alignment.TopEnd)
-                                .size(34.dp)
-                                .background(Color.Black.copy(alpha = 0.5f), CircleShape)
+                                .fillMaxSize()
+                                .padding(14.dp)
                         ) {
-                            Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White)
-                        }
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = Color.Black.copy(alpha = 0.5f),
+                                modifier = Modifier.align(Alignment.TopStart)
+                            ) {
+                                Text(
+                                    text = photo.timeOfDay,
+                                    color = Color.White,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                )
+                            }
 
-                        // Center Icon Emblem
-                        Icon(
-                            imageVector = when (photo.dominantIcon) {
-                                "tent" -> Icons.Default.Bed
-                                "water" -> Icons.Default.WaterDrop
-                                "bolt" -> Icons.Default.Bolt
-                                "stars" -> Icons.Default.Star
-                                else -> Icons.Default.Landscape
-                            },
-                            contentDescription = null,
-                            tint = Color.White.copy(alpha = 0.35f),
-                            modifier = Modifier
-                                .size(88.dp)
-                                .align(Alignment.Center)
-                        )
+                            IconButton(
+                                onClick = { expandedPhoto = null },
+                                modifier = Modifier
+                                    .align(Alignment.TopEnd)
+                                    .size(34.dp)
+                                    .background(Color.Black.copy(alpha = 0.5f), CircleShape)
+                            ) {
+                                Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White)
+                            }
 
-                        Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = Color.Black.copy(alpha = 0.5f),
-                            modifier = Modifier.align(Alignment.BottomStart)
-                        ) {
-                            Text(
-                                text = photo.tag.label,
-                                color = Color.White,
-                                fontSize = 11.sp,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                            )
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = Color.Black.copy(alpha = 0.5f),
+                                modifier = Modifier.align(Alignment.BottomStart)
+                            ) {
+                                Text(
+                                    text = photo.tag.label,
+                                    color = Color.White,
+                                    fontSize = 11.sp,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                )
+                            }
                         }
                     }
 
@@ -476,58 +505,85 @@ private fun PhotoCardItem(
                         colors = photo.gradientColors.map { Color(it) }
                     )
                 )
-                .padding(10.dp)
         ) {
-            // Tag & Time of day
-            Row(
-                modifier = Modifier.align(Alignment.TopStart),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Surface(
-                    shape = RoundedCornerShape(6.dp),
-                    color = Color.Black.copy(alpha = 0.45f)
-                ) {
-                    Text(
-                        text = photo.timeOfDay.take(15),
-                        color = Color.White,
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
-                    )
-                }
+            if (photo.imageUrl.isNotBlank()) {
+                AsyncImage(
+                    model = photo.imageUrl,
+                    contentDescription = photo.caption,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(
+                            Brush.verticalGradient(
+                                colors = listOf(
+                                    Color.Black.copy(alpha = 0.3f),
+                                    Color.Transparent,
+                                    Color.Black.copy(alpha = 0.6f)
+                                )
+                            )
+                        )
+                )
+            } else {
+                // Center Symbol fallback
+                Icon(
+                    imageVector = when (photo.dominantIcon) {
+                        "tent" -> Icons.Default.Bed
+                        "water" -> Icons.Default.WaterDrop
+                        "bolt" -> Icons.Default.Bolt
+                        "stars" -> Icons.Default.Star
+                        else -> Icons.Default.Landscape
+                    },
+                    contentDescription = null,
+                    tint = Color.White.copy(alpha = 0.25f),
+                    modifier = Modifier
+                        .size(54.dp)
+                        .align(Alignment.Center)
+                )
             }
 
-            // Center Symbol
-            Icon(
-                imageVector = when (photo.dominantIcon) {
-                    "tent" -> Icons.Default.Bed
-                    "water" -> Icons.Default.WaterDrop
-                    "bolt" -> Icons.Default.Bolt
-                    "stars" -> Icons.Default.Star
-                    else -> Icons.Default.Landscape
-                },
-                contentDescription = null,
-                tint = Color.White.copy(alpha = 0.25f),
+            Box(
                 modifier = Modifier
-                    .size(54.dp)
-                    .align(Alignment.Center)
-            )
-
-            // Caption overlay
-            Surface(
-                shape = RoundedCornerShape(8.dp),
-                color = Color.Black.copy(alpha = 0.6f),
-                modifier = Modifier.align(Alignment.BottomStart)
+                    .fillMaxSize()
+                    .padding(10.dp)
             ) {
-                Column(modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp)) {
-                    Text(
-                        text = photo.caption,
-                        color = Color.White,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Medium,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
-                    )
+                // Tag & Time of day
+                Row(
+                    modifier = Modifier.align(Alignment.TopStart),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(6.dp),
+                        color = Color.Black.copy(alpha = 0.45f)
+                    ) {
+                        Text(
+                            text = photo.timeOfDay.take(15),
+                            color = Color.White,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
+                        )
+                    }
+                }
+
+                // Caption overlay
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = Color.Black.copy(alpha = 0.6f),
+                    modifier = Modifier.align(Alignment.BottomStart)
+                ) {
+                    Column(modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp)) {
+                        Text(
+                            text = photo.caption,
+                            color = Color.White,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
                 }
             }
         }

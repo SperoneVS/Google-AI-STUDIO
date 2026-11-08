@@ -43,9 +43,11 @@ class MainActivity : ComponentActivity() {
                 ) { permissions ->
                     val fineGranted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] ?: false
                     val coarseGranted = permissions[Manifest.permission.ACCESS_COARSE_LOCATION] ?: false
-                    if (fineGranted || coarseGranted) {
+                    val granted = fineGranted || coarseGranted
+                    viewModel.onLocationPermissionResult(granted)
+                    if (granted) {
                         tryGetLocation { lat, lon ->
-                            viewModel.setUserLocation(lat, lon)
+                            viewModel.triggerAutoFindInArea(lat, lon)
                         }
                     }
                 }
@@ -53,7 +55,10 @@ class MainActivity : ComponentActivity() {
                 LaunchedEffect(Unit) {
                     viewModel.trySilentSignIn(this@MainActivity)
                     val fineCheck = ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.ACCESS_FINE_LOCATION)
-                    if (fineCheck != PackageManager.PERMISSION_GRANTED) {
+                    val coarseCheck = ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.ACCESS_COARSE_LOCATION)
+                    val alreadyGranted = fineCheck == PackageManager.PERMISSION_GRANTED || coarseCheck == PackageManager.PERMISSION_GRANTED
+                    viewModel.onLocationPermissionResult(alreadyGranted)
+                    if (!alreadyGranted) {
                         locationPermissionLauncher.launch(
                             arrayOf(
                                 Manifest.permission.ACCESS_FINE_LOCATION,
@@ -62,7 +67,7 @@ class MainActivity : ComponentActivity() {
                         )
                     } else {
                         tryGetLocation { lat, lon ->
-                            viewModel.setUserLocation(lat, lon)
+                            viewModel.triggerAutoFindInArea(lat, lon)
                         }
                     }
                 }
@@ -111,7 +116,12 @@ class MainActivity : ComponentActivity() {
             val location: Location? = locationManager?.getLastKnownLocation(android.location.LocationManager.GPS_PROVIDER)
                 ?: locationManager?.getLastKnownLocation(android.location.LocationManager.NETWORK_PROVIDER)
             if (location != null) {
-                onLocationFound(location.latitude, location.longitude)
+                val isUsCoordinate = (location.latitude in 24.3..49.4 && location.longitude in -125.0..-66.9) ||
+                    (location.latitude in 51.2..71.5 && location.longitude in -179.0..-129.9) ||
+                    (location.latitude in 18.8..22.3 && location.longitude in -160.3..-154.7)
+                if (!isUsCoordinate) {
+                    onLocationFound(location.latitude, location.longitude)
+                }
             }
         } catch (_: SecurityException) {
             // Permission denied or revoked; default coordinates are safely used

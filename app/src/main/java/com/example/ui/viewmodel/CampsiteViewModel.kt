@@ -8,6 +8,7 @@ import com.example.data.local.AppDatabase
 import com.example.data.model.*
 import com.example.data.repository.AuthRepository
 import com.example.data.repository.CampsiteRepository
+import com.example.util.LocationTracker
 import com.example.util.Park4NightHelper
 import com.example.util.PlaceSearchResult
 import com.example.util.PlacesSearchService
@@ -102,6 +103,9 @@ class CampsiteViewModel(application: Application) : AndroidViewModel(application
     private val _userCoordinates = MutableStateFlow(Pair(46.5197, 9.9534))
     val userCoordinates: StateFlow<Pair<Double, Double>> = _userCoordinates.asStateFlow()
 
+    private val _hasLocationPermission = MutableStateFlow(LocationTracker.hasLocationPermission(application))
+    val hasLocationPermission: StateFlow<Boolean> = _hasLocationPermission.asStateFlow()
+
     private val _screenStack = MutableStateFlow<List<ScreenDestination>>(listOf(ScreenDestination.Explore))
     val currentScreen: StateFlow<ScreenDestination> = _screenStack.map { it.lastOrNull() ?: ScreenDestination.Explore }
         .stateIn(viewModelScope, SharingStarted.Eagerly, ScreenDestination.Explore)
@@ -117,8 +121,17 @@ class CampsiteViewModel(application: Application) : AndroidViewModel(application
     val isSearchingPlaces: StateFlow<Boolean> = _isSearchingPlaces.asStateFlow()
 
     private var placeSearchJob: Job? = null
+    private var liveMapsFetchJob: Job? = null
 
-    private val _allCampsites = repository.getCampsitesFlow()
+    private val _liveGoogleMapsCampsites = MutableStateFlow<List<Campsite>>(emptyList())
+
+    private val _allCampsites = combine(
+        repository.getCampsitesFlow(),
+        _liveGoogleMapsCampsites
+    ) { dbSites, liveMapsSites ->
+        val existingIds = dbSites.map { it.id }.toSet()
+        dbSites + liveMapsSites.filter { it.id !in existingIds }
+    }
 
     val filteredCampsites: StateFlow<List<Campsite>> = combine(_allCampsites, _filterState, _userCoordinates) { sites, filter, userLoc ->
         var list = sites
@@ -207,6 +220,22 @@ class CampsiteViewModel(application: Application) : AndroidViewModel(application
     init {
         // Initialize private on-device Park4night profile
         Park4NightHelper.initPrivateAccount(application)
+        // Fetch live Google Maps campsites around initial European Alps coordinates if secret is configured
+        fetchLiveMapsCampsitesForLocation(_userCoordinates.value.first, _userCoordinates.value.second, _filterState.value.areaLabel)
+    }
+
+    private fun fetchLiveMapsCampsitesForLocation(lat: Double, lon: Double, areaLabel: String) {
+        if (!PlacesSearchService.hasValidApiKey()) return
+        liveMapsFetchJob?.cancel()
+        liveMapsFetchJob = viewModelScope.launch {
+            val liveSites = PlacesSearchService.fetchNearbyCampsitesFromGoogleMaps(lat, lon, areaLabel)
+            if (liveSites.isNotEmpty()) {
+                _liveGoogleMapsCampsites.update { current ->
+                    val existingIds = current.map { it.id }.toSet()
+                    current + liveSites.filter { it.id !in existingIds }
+                }
+            }
+        }
     }
 
     fun setUnitSystem(system: UnitSystem) {
@@ -294,12 +323,36 @@ class CampsiteViewModel(application: Application) : AndroidViewModel(application
         _filterState.update { it.copy(maxDistanceMiles = dist) }
     }
 
+    fun onLocationPermissionResult(granted: Boolean) {
+        _hasLocationPermission.value = granted
+    }
+
+    fun refreshLocationPermissionState() {
+        _hasLocationPermission.value = LocationTracker.hasLocationPermission(getApplication())
+    }
+
     fun setUserLocation(lat: Double, lon: Double, areaLabel: String = "Selected Area") {
         _userCoordinates.value = Pair(lat, lon)
-        _filterState.update { it.copy(areaLabel = areaLabel, isAutoFindActive = false) }
+        _filterState.update {
+            it.copy(
+                areaLabel = areaLabel,
+                isAutoFindActive = false,
+                sortOption = CampsiteSortOption.DISTANCE
+            )
+        }
+        if (areaLabel == "Selected Area") {
+            viewModelScope.launch {
+                val resolvedArea = PlacesSearchService.reverseGeocodeAreaLabel(getApplication(), lat, lon)
+                _filterState.update { it.copy(areaLabel = resolvedArea) }
+                fetchLiveMapsCampsitesForLocation(lat, lon, resolvedArea)
+            }
+        } else {
+            fetchLiveMapsCampsitesForLocation(lat, lon, areaLabel)
+        }
     }
 
     fun triggerAutoFindInArea(lat: Double, lon: Double, areaLabel: String = "Your GPS Area") {
+        _hasLocationPermission.value = true
         _userCoordinates.value = Pair(lat, lon)
         _filterState.update {
             it.copy(
@@ -307,6 +360,17 @@ class CampsiteViewModel(application: Application) : AndroidViewModel(application
                 isAutoFindActive = true,
                 sortOption = CampsiteSortOption.DISTANCE
             )
+        }
+        viewModelScope.launch {
+            val resolvedArea = PlacesSearchService.reverseGeocodeAreaLabel(getApplication(), lat, lon)
+            _filterState.update {
+                it.copy(
+                    areaLabel = resolvedArea,
+                    isAutoFindActive = true,
+                    sortOption = CampsiteSortOption.DISTANCE
+                )
+            }
+            fetchLiveMapsCampsitesForLocation(lat, lon, resolvedArea)
         }
     }
 
