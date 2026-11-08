@@ -37,6 +37,7 @@ import com.example.ui.viewmodel.*
 import com.example.util.GoogleMapsHelper
 import com.example.util.LocationTracker
 import com.example.util.Park4NightHelper
+import com.example.util.PlaceSearchResult
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -50,7 +51,8 @@ fun ExploreScreen(
     val userCoords by viewModel.userCoordinates.collectAsState()
     val lastSyncInfo by viewModel.lastSyncInfo.collectAsState()
     val unitSystem by viewModel.unitSystem.collectAsState()
-    val showUnitPrompt by viewModel.showUnitPrompt.collectAsState()
+    val placeSuggestions by viewModel.placeSuggestions.collectAsState()
+    val isSearchingPlaces by viewModel.isSearchingPlaces.collectAsState()
 
     var showSortMenu by remember { mutableStateOf(false) }
     var showAreaMenu by remember { mutableStateOf(false) }
@@ -243,30 +245,172 @@ fun ExploreScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            // Search Input
-            OutlinedTextField(
-                value = filterState.query,
-                onValueChange = { viewModel.setQuery(it) },
+            // GOOGLE MAPS POWERED SEARCH BAR WITH REGION & CITY AUTO-SUGGESTIONS
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 4.dp)
-                    .testTag("search_input"),
-                placeholder = { Text("Search France, Italy, Dolomites, Black Forest, pitch...") },
-                leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Search") },
-                trailingIcon = {
-                    if (filterState.query.isNotEmpty()) {
-                        IconButton(onClick = { viewModel.setQuery("") }) {
-                            Icon(Icons.Default.Clear, contentDescription = "Clear")
+            ) {
+                OutlinedTextField(
+                    value = filterState.query,
+                    onValueChange = { viewModel.setQuery(it) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("search_input"),
+                    placeholder = { Text("Search region, city, or campsite via Google Maps...") },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Default.Search,
+                            contentDescription = "Search",
+                            tint = Color(0xFF0288D1)
+                        )
+                    },
+                    trailingIcon = {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            if (isSearchingPlaces) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(16.dp),
+                                    strokeWidth = 2.dp,
+                                    color = Color(0xFF0288D1)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                            }
+                            if (filterState.query.isNotEmpty()) {
+                                IconButton(onClick = { viewModel.setQuery("") }) {
+                                    Icon(Icons.Default.Clear, contentDescription = "Clear")
+                                }
+                            }
+                        }
+                    },
+                    singleLine = true,
+                    shape = RoundedCornerShape(14.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+                        focusedContainerColor = MaterialTheme.colorScheme.surface,
+                        focusedBorderColor = Color(0xFF0288D1)
+                    )
+                )
+
+                // Google Maps Region & City Search Suggestions Card
+                AnimatedVisibility(
+                    visible = placeSuggestions.isNotEmpty(),
+                    enter = expandVertically() + fadeIn(),
+                    exit = shrinkVertically() + fadeOut()
+                ) {
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 4.dp)
+                            .testTag("place_suggestions_card"),
+                        shape = RoundedCornerShape(12.dp),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surface
+                        )
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(vertical = 4.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Default.Place,
+                                        contentDescription = null,
+                                        tint = Color(0xFF0288D1),
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = "Google Maps Regions & Cities",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF0288D1)
+                                    )
+                                }
+                                TextButton(
+                                    onClick = { viewModel.clearPlaceSuggestions() },
+                                    contentPadding = PaddingValues(0.dp)
+                                ) {
+                                    Text("Dismiss", fontSize = 10.sp)
+                                }
+                            }
+
+                            Divider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+
+                            placeSuggestions.forEach { place ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable {
+                                            viewModel.selectPlaceDestination(place)
+                                            Toast.makeText(
+                                                context,
+                                                "Loaded campsites near ${place.name}!",
+                                                Toast.LENGTH_SHORT
+                                            ).show()
+                                        }
+                                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Surface(
+                                        shape = CircleShape,
+                                        color = Color(0xFFE1F5FE),
+                                        modifier = Modifier.size(32.dp)
+                                    ) {
+                                        Box(contentAlignment = Alignment.Center) {
+                                            Icon(
+                                                imageVector = Icons.Default.LocationCity,
+                                                contentDescription = null,
+                                                tint = Color(0xFF0288D1),
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                        }
+                                    }
+
+                                    Spacer(modifier = Modifier.width(10.dp))
+
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = place.name,
+                                            fontSize = 13.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                        Text(
+                                            text = place.formattedAddress,
+                                            fontSize = 11.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            maxLines = 1
+                                        )
+                                    }
+
+                                    Spacer(modifier = Modifier.width(6.dp))
+
+                                    Surface(
+                                        shape = RoundedCornerShape(6.dp),
+                                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                                    ) {
+                                        Text(
+                                            text = "Find Sites",
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
+                                        )
+                                    }
+                                }
+                                Divider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f))
+                            }
                         }
                     }
-                },
-                singleLine = true,
-                shape = RoundedCornerShape(14.dp),
-                colors = OutlinedTextFieldDefaults.colors(
-                    unfocusedContainerColor = MaterialTheme.colorScheme.surface,
-                    focusedContainerColor = MaterialTheme.colorScheme.surface
-                )
-            )
+                }
+            }
 
             // EUROPEAN AREA & GOOGLE MAPS CONTROLLER CARD
             Card(
@@ -385,12 +529,82 @@ fun ExploreScreen(
                                         viewModel.setUserLocation(37.0658, -8.8242, "🇵🇹 Portugal")
                                     }
                                 )
-                                Divider()
                                 DropdownMenuItem(
-                                    text = { Text("🇺🇸 USA (High Sierra & Pacific NW)") },
+                                    text = { Text("🇬🇧 UK (Scotland Skye & Lake District)") },
                                     onClick = {
                                         showAreaMenu = false
-                                        viewModel.setUserLocation(37.8651, -119.5383, "🇺🇸 California Sierra")
+                                        viewModel.setUserLocation(57.2045, -6.2891, "🇬🇧 Isle of Skye, Scotland")
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("🇭🇷 Croatia (Plitvice Lakes & Coast)") },
+                                    onClick = {
+                                        showAreaMenu = false
+                                        viewModel.setUserLocation(44.9458, 15.6083, "🇭🇷 Croatia (Plitvice)")
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("🇸🇮 Slovenia (Lake Bohinj & Julian Alps)") },
+                                    onClick = {
+                                        showAreaMenu = false
+                                        viewModel.setUserLocation(46.2758, 13.9536, "🇸🇮 Slovenia (Julian Alps)")
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("🇬🇷 Greece (Meteora Monasteries)") },
+                                    onClick = {
+                                        showAreaMenu = false
+                                        viewModel.setUserLocation(39.7153, 21.6189, "🇬🇷 Greece (Meteora)")
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("🇳🇱 Netherlands (Veluwezoom National Park)") },
+                                    onClick = {
+                                        showAreaMenu = false
+                                        viewModel.setUserLocation(52.0167, 6.0028, "🇳🇱 Netherlands")
+                                    }
+                                )
+                                Divider()
+                                DropdownMenuItem(
+                                    text = { Text("🇨🇦 Canada (Banff & Jasper Rockies)") },
+                                    onClick = {
+                                        showAreaMenu = false
+                                        viewModel.setUserLocation(51.1982, -115.4988, "🇨🇦 Banff, Canada")
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("🇦🇺 Australia (Great Ocean Road & Blue Mtns)") },
+                                    onClick = {
+                                        showAreaMenu = false
+                                        viewModel.setUserLocation(-38.8291, 143.5878, "🇦🇺 Great Ocean Road, Australia")
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("🇳🇿 New Zealand (Mount Cook & Fiordland)") },
+                                    onClick = {
+                                        showAreaMenu = false
+                                        viewModel.setUserLocation(-43.7188, 170.0931, "🇳🇿 Aoraki Mount Cook, New Zealand")
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("🇯🇵 Japan (Mount Fuji & Japanese Alps)") },
+                                    onClick = {
+                                        showAreaMenu = false
+                                        viewModel.setUserLocation(35.4056, 138.5628, "🇯🇵 Mount Fuji, Japan")
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("🇿🇦 South Africa (Tsitsikamma & Garden Route)") },
+                                    onClick = {
+                                        showAreaMenu = false
+                                        viewModel.setUserLocation(-34.0225, 23.9022, "🇿🇦 South Africa (Garden Route)")
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("🇨🇱 Chile (Patagonia Torres del Paine)") },
+                                    onClick = {
+                                        showAreaMenu = false
+                                        viewModel.setUserLocation(-51.1082, -72.9961, "🇨🇱 Torres del Paine, Chile")
                                     }
                                 )
                             }
@@ -743,42 +957,5 @@ fun ExploreScreen(
                 }
             }
         }
-    }
-
-    // First-launch Unit Prompt: Ask for European or American metrics
-    if (showUnitPrompt) {
-        AlertDialog(
-            onDismissRequest = { viewModel.dismissUnitPrompt() },
-            icon = { Icon(Icons.Default.Straighten, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
-            title = { Text("Choose Metric System", fontWeight = FontWeight.Bold) },
-            text = {
-                Column {
-                    Text(
-                        text = "Would you like European Metric or American Imperial units for distances, elevations, and vehicle measurements?",
-                        fontSize = 14.sp
-                    )
-                    Spacer(modifier = Modifier.height(14.dp))
-                    Text(
-                        text = "🇪🇺 European Metric: Kilometers (km), Meters (m), Kilograms (kg)\n🇺🇸 American Imperial: Miles (mi), Feet (ft), Pounds (lbs)",
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = { viewModel.setUnitSystem(UnitSystem.METRIC) }
-                ) {
-                    Text("🇪🇺 European Metric (km / m)")
-                }
-            },
-            dismissButton = {
-                OutlinedButton(
-                    onClick = { viewModel.setUnitSystem(UnitSystem.IMPERIAL) }
-                ) {
-                    Text("🇺🇸 American Imperial (mi / ft)")
-                }
-            }
-        )
     }
 }

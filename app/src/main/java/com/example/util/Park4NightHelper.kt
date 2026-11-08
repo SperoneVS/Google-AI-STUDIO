@@ -40,6 +40,13 @@ object Park4NightHelper {
     }
 
     /**
+     * Builds standard web/deep-link URL for park4night search at coordinates
+     */
+    fun buildPark4NightUrl(latitude: Double, longitude: Double): String {
+        return "https://park4night.com/en/search?lat=$latitude&lng=$longitude"
+    }
+
+    /**
      * Launch spot directly in park4night app or web view
      */
     fun openSpotInPark4Night(
@@ -49,7 +56,7 @@ object Park4NightHelper {
         spotName: String = ""
     ) {
         try {
-            val url = "https://park4night.com/en/search?lat=$latitude&lng=$longitude"
+            val url = buildPark4NightUrl(latitude, longitude)
             val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK
             }

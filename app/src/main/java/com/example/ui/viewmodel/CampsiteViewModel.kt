@@ -9,6 +9,10 @@ import com.example.data.model.*
 import com.example.data.repository.AuthRepository
 import com.example.data.repository.CampsiteRepository
 import com.example.util.Park4NightHelper
+import com.example.util.PlaceSearchResult
+import com.example.util.PlacesSearchService
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlin.math.*
@@ -90,8 +94,8 @@ class CampsiteViewModel(application: Application) : AndroidViewModel(application
     )
     val unitSystem: StateFlow<UnitSystem> = _unitSystem.asStateFlow()
 
-    // Prompt camper to confirm European or American metrics on first launch
-    private val _showUnitPrompt = MutableStateFlow(!prefs.contains("unit_system_chosen"))
+    // Prompt camper to confirm European or American metrics on first launch (Suppressed: defaults to European Metric)
+    private val _showUnitPrompt = MutableStateFlow(false)
     val showUnitPrompt: StateFlow<Boolean> = _showUnitPrompt.asStateFlow()
 
     // Default coordinates: Central Europe (Alps outdoor hub: St. Moritz / Chamonix corridor)
@@ -104,6 +108,15 @@ class CampsiteViewModel(application: Application) : AndroidViewModel(application
 
     private val _filterState = MutableStateFlow(FilterState())
     val filterState: StateFlow<FilterState> = _filterState.asStateFlow()
+
+    // Google Maps API / Place Search State
+    private val _placeSuggestions = MutableStateFlow<List<PlaceSearchResult>>(emptyList())
+    val placeSuggestions: StateFlow<List<PlaceSearchResult>> = _placeSuggestions.asStateFlow()
+
+    private val _isSearchingPlaces = MutableStateFlow(false)
+    val isSearchingPlaces: StateFlow<Boolean> = _isSearchingPlaces.asStateFlow()
+
+    private var placeSearchJob: Job? = null
 
     private val _allCampsites = repository.getCampsitesFlow()
 
@@ -212,6 +225,37 @@ class CampsiteViewModel(application: Application) : AndroidViewModel(application
 
     fun setQuery(q: String) {
         _filterState.update { it.copy(query = q) }
+
+        // Debounced place search via PlacesSearchService
+        placeSearchJob?.cancel()
+        val trimmed = q.trim()
+        if (trimmed.length < 2) {
+            _placeSuggestions.value = emptyList()
+            _isSearchingPlaces.value = false
+        } else {
+            placeSearchJob = viewModelScope.launch {
+                delay(300) // 300ms debounce
+                _isSearchingPlaces.value = true
+                val results = PlacesSearchService.searchPlaces(getApplication(), trimmed)
+                _placeSuggestions.value = results
+                _isSearchingPlaces.value = false
+            }
+        }
+    }
+
+    fun selectPlaceDestination(place: PlaceSearchResult) {
+        // Clear search input and suggestions
+        _filterState.update { it.copy(query = "", areaLabel = "${place.name} (${place.country ?: "Region"})") }
+        _placeSuggestions.value = emptyList()
+        _isSearchingPlaces.value = false
+
+        // Update user location center to this searched region
+        setUserLocation(place.latitude, place.longitude, "${place.name} (${place.country ?: "Region"})")
+    }
+
+    fun clearPlaceSuggestions() {
+        _placeSuggestions.value = emptyList()
+        _isSearchingPlaces.value = false
     }
 
     fun setPillar(p: ActivePillarFilter) {
@@ -531,15 +575,17 @@ class CampsiteViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    private fun calculateDistanceMiles(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
-        val r = 3958.8 // Radius of the earth in miles
-        val dLat = Math.toRadians(lat2 - lat1)
-        val dLon = Math.toRadians(lon2 - lon1)
-        val a = sin(dLat / 2).pow(2.0) +
-                cos(Math.toRadians(lat1)) * cos(Math.toRadians(lat2)) *
-                sin(dLon / 2).pow(2.0)
-        val c = 2 * atan2(sqrt(a), sqrt(1 - a))
-        val distance = r * c
-        return (distance * 10).roundToInt() / 10.0
+    companion object {
+        fun calculateDistanceMiles(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
+            val r = 3958.8 // Radius of the earth in miles
+            val dLat = Math.toRadians(lat2 - lat1)
+            val dLon = Math.toRadians(lon2 - lon1)
+            val a = sin(dLat / 2).pow(2.0) +
+                    cos(Math.toRadians(lat1)) * cos(Math.toRadians(lat2)) *
+                    sin(dLon / 2).pow(2.0)
+            val c = 2 * atan2(sqrt(a), sqrt(1 - a))
+            val distance = r * c
+            return (distance * 10).roundToInt() / 10.0
+        }
     }
 }

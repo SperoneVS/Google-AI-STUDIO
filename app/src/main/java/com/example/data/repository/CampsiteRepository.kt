@@ -812,94 +812,6 @@ class CampsiteRepository(
             photoUrls = listOf("https://images.unsplash.com/photo-1518495973542-4542c06a5843?w=800"),
             isPark4NightVerified = true,
             park4NightNote = "Park4night #14220 • Green eco camp in Portugal Algarve. Shaded van spots, hot showers."
-        ),
-
-        // ==========================================
-        // 🇺🇸 NORTH AMERICA (CLASSIC HUBS)
-        // ==========================================
-        Campsite(
-            id = "curated_1",
-            name = "Whispering Pines Ridge",
-            region = "Sierra High Country",
-            stateOrCountry = "California, USA",
-            latitude = 37.8651,
-            longitude = -119.5383,
-            feePerNight = "$18 / night",
-            rating = 4.9,
-            reviewCount = 142,
-            sleep = SleepDetails(
-                type = SleepType.TENT,
-                groundType = GroundType.PINE_NEEDLES,
-                maxCapacity = 6,
-                hammockFriendly = true,
-                shadeRating = 5,
-                quietHours = "10:00 PM - 7:00 AM",
-                elevationFt = 7400
-            ),
-            water = WaterDetails(
-                sourceType = WaterSourceType.NATURAL_SPRING,
-                distanceToSourceMeters = 35,
-                hasHotShowers = false,
-                hasColdShowers = true,
-                hasDishwashingSink = true,
-                flowReliability = "Year-round alpine spring"
-            ),
-            energy = EnergyDetails(
-                sourceType = EnergySourceType.SOLAR_CLEARING,
-                solarExposureIndex = 9,
-                generatorAllowed = false,
-                generatorHours = "Strictly prohibited (Silent zone)",
-                campfireRing = true,
-                firewoodPurchasable = true,
-                hasEvCharging = false
-            ),
-            cellReceptionBars = 1,
-            terrainType = "Alpine Forest",
-            description = "Nestled under towering Jeffrey pines, offering naturally cushioned pine needle sleeping grounds and an icy sweet natural mineral spring.",
-            insiderTips = "Sites 7 and 9 have perfect twin pines for hammocks directly facing the sunrise. Spring water is naturally filtered through granite.",
-            photoUrl = "https://images.unsplash.com/photo-1506744038136-46273834b3fb?w=800"
-        ),
-        Campsite(
-            id = "curated_2",
-            name = "Silver River Hookup & Haven",
-            region = "Olympic Foothills",
-            stateOrCountry = "Washington, USA",
-            latitude = 47.8021,
-            longitude = -123.6044,
-            feePerNight = "$34 / night",
-            rating = 4.8,
-            reviewCount = 210,
-            sleep = SleepDetails(
-                type = SleepType.CAMPERVAN,
-                groundType = GroundType.GRAVEL,
-                maxCapacity = 8,
-                hammockFriendly = false,
-                shadeRating = 4,
-                quietHours = "10:00 PM - 8:00 AM",
-                elevationFt = 820
-            ),
-            water = WaterDetails(
-                sourceType = WaterSourceType.POTABLE_TAP,
-                distanceToSourceMeters = 5,
-                hasHotShowers = true,
-                hasColdShowers = true,
-                hasDishwashingSink = true,
-                flowReliability = "Continuous municipal fresh tap"
-            ),
-            energy = EnergyDetails(
-                sourceType = EnergySourceType.FULL_HOOKUP_30_50A,
-                solarExposureIndex = 6,
-                generatorAllowed = true,
-                generatorHours = "8:00 AM - 8:00 PM only",
-                campfireRing = true,
-                firewoodPurchasable = true,
-                hasEvCharging = true
-            ),
-            cellReceptionBars = 4,
-            terrainType = "Rainforest Riverbank",
-            description = "Prime spot for campervans, roof-tents, and overland rigs requiring shore power, clean running water, and hot showers after rainy hikes.",
-            insiderTips = "Each hookup pedestal includes 50A/30A/20A dual GFI breakers. High pressure water connection with pressure regulator advised.",
-            photoUrl = "https://images.unsplash.com/photo-1510312305653-8ed496efae75?w=800"
         )
     )
 
@@ -1007,8 +919,10 @@ class CampsiteRepository(
         return combine(localCustomFlow, _firestoreCampsites, bookmarkFlow) { localList, cloudList, bookmarkedIds ->
             val combinedMap = linkedMapOf<String, Campsite>()
 
-            // 1. Curated European & international base campsites
+            // 1. Curated European, World & Park4night verified base campsites
             curatedCampsites.forEach { combinedMap[it.id] = it }
+            WorldCampsitesData.worldCampsites.forEach { combinedMap[it.id] = it }
+            EuropeanPark4NightData.europeanPark4NightCampsites.forEach { combinedMap[it.id] = it }
             // 2. Cloud shared (shared with everyone on the app)
             cloudList.forEach { combinedMap[it.id] = it }
             // 3. Local custom spots
@@ -1089,7 +1003,8 @@ class CampsiteRepository(
     }
 
     suspend fun seedInitialCampsites() {
-        val roomEntities = curatedCampsites.map { it.toRoomCampsite() }
+        val allCurated = curatedCampsites + WorldCampsitesData.worldCampsites + EuropeanPark4NightData.europeanPark4NightCampsites
+        val roomEntities = allCurated.map { it.toRoomCampsite() }
         dao.insertAllCampsites(roomEntities)
     }
 

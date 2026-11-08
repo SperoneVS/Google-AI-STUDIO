@@ -183,4 +183,75 @@ class ExampleRobolectricTest {
     assertTrue("Energy must be recorded as available", inserted?.isEnergyAvailable == true)
     assertEquals("30A Shore Hookup Working", inserted?.energyStatusLabel)
   }
+
+  @Test
+  fun `test European Park4Night campsites catalog and verification`() {
+    val europeanSites = com.example.data.repository.EuropeanPark4NightData.europeanPark4NightCampsites
+    assertTrue("Should have extensive European Park4Night campsites", europeanSites.size >= 12)
+
+    val verdon = europeanSites.find { it.id == "p4n_eu_fr_verdon" }
+    assertNotNull("Verdon campsite should exist", verdon)
+    assertTrue("Verdon must be Park4night verified", verdon!!.isPark4NightVerified)
+    assertTrue("Verdon must have Park4night note", verdon.park4NightNote.contains("Park4night #48102"))
+    assertEquals("France", verdon.stateOrCountry)
+
+    val garda = europeanSites.find { it.id == "p4n_eu_it_garda" }
+    assertNotNull("Garda campsite should exist", garda)
+    assertTrue("Garda must be Park4night verified", garda!!.isPark4NightVerified)
+    assertEquals("Italy", garda.stateOrCountry)
+
+    val plitvice = europeanSites.find { it.id == "p4n_eu_hr_plitvice" }
+    assertNotNull("Plitvice campsite should exist", plitvice)
+    assertEquals("Croatia", plitvice!!.stateOrCountry)
+
+    val bohinj = europeanSites.find { it.id == "p4n_eu_si_bohinj" }
+    assertNotNull("Bohinj campsite should exist", bohinj)
+    assertEquals("Slovenia", bohinj!!.stateOrCountry)
+
+    val meteora = europeanSites.find { it.id == "p4n_eu_gr_meteora" }
+    assertNotNull("Meteora campsite should exist", meteora)
+    assertEquals("Greece", meteora!!.stateOrCountry)
+
+    // Ensure all European spots have valid coordinates for Google Maps
+    europeanSites.forEach { site ->
+      assertTrue("${site.name} latitude should be valid", site.latitude in -90.0..90.0)
+      assertTrue("${site.name} longitude should be valid", site.longitude in -180.0..180.0)
+      assertTrue("${site.name} should have verified badge", site.isPark4NightVerified)
+      assertTrue("${site.name} should have sleep details", site.sleep.maxCapacity > 0)
+    }
+  }
+
+  @Test
+  fun `test Park4Night deep link URL format`() {
+    val url = com.example.util.Park4NightHelper.buildPark4NightUrl(43.7801, 6.3414)
+    assertEquals("https://park4night.com/en/search?lat=43.7801&lng=6.3414", url)
+  }
+
+  @Test
+  fun `test no United States campsites exist in curated catalog`() {
+    val context = ApplicationProvider.getApplicationContext<Context>()
+    val database = com.example.data.local.AppDatabase.getInstance(context)
+    val repo = CampsiteRepository(database, context)
+
+    val curatedSites = repo.curatedCampsites
+    assertTrue("Curated campsites should exist", curatedSites.isNotEmpty())
+
+    // Verify zero USA campsites in curated set
+    val usSites = curatedSites.filter {
+      it.stateOrCountry.contains("USA", ignoreCase = true) ||
+      it.stateOrCountry.contains("United States", ignoreCase = true) ||
+      it.id == "curated_1" ||
+      it.id == "curated_2"
+    }
+    assertTrue("Curated campsites must not contain any US sites, found: ${usSites.map { it.name }}", usSites.isEmpty())
+  }
+
+  @Test
+  fun `test default unit system is European Metric`() {
+    val context = ApplicationProvider.getApplicationContext<Context>()
+    val vm = CampsiteViewModel(context as android.app.Application)
+
+    assertEquals(com.example.data.model.UnitSystem.METRIC, vm.unitSystem.value)
+    assertEquals(false, vm.showUnitPrompt.value)
+  }
 }

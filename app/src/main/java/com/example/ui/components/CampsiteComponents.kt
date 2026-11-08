@@ -335,6 +335,53 @@ fun CampsiteCard(
                         modifier = Modifier.weight(1f)
                     )
                 }
+
+                // Park4night verified info strip with direct deep link
+                if (campsite.isPark4NightVerified) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = Color(0xFFE8F5E9),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("card_p4n_strip_${campsite.id}")
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 10.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "🌲",
+                                fontSize = 12.sp
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = if (campsite.park4NightNote.isNotBlank()) campsite.park4NightNote else "Park4night verified camper stop",
+                                fontSize = 11.sp,
+                                color = Color(0xFF1B5E20),
+                                fontWeight = FontWeight.Medium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f)
+                            )
+                            if (onOpenPark4Night != null) {
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "Park4night ↗",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF2E7D32),
+                                    modifier = Modifier
+                                        .clickable { onOpenPark4Night() }
+                                        .padding(horizontal = 4.dp, vertical = 2.dp)
+                                        .testTag("card_open_p4n_${campsite.id}")
+                                )
+                            }
+                        }
+                    }
+                }
             }
         }
     }

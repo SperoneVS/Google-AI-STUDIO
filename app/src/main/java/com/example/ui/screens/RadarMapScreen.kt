@@ -47,6 +47,7 @@ fun RadarMapScreen(
     val userCoords by viewModel.userCoordinates.collectAsState()
     var selectedPinCampsite by remember { mutableStateOf<Campsite?>(null) }
     var mapFilterMode by remember { mutableStateOf(ActivePillarFilter.ALL) }
+    var radarScaleMiles by remember { mutableStateOf(1000.0) } // 300mi, 1000mi, 8000mi (Global World)
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
@@ -120,6 +121,38 @@ fun RadarMapScreen(
                         selected = mapFilterMode == ActivePillarFilter.ENERGY,
                         onClick = { mapFilterMode = ActivePillarFilter.ENERGY },
                         label = { Text("⚡ Energy") }
+                    )
+                }
+
+                // Range Scale Row (Local, Region, World)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 2.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Scale:", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold)
+                    AssistChip(
+                        onClick = { radarScaleMiles = 300.0 },
+                        label = { Text("Local (300 mi)", fontSize = 10.sp) },
+                        colors = AssistChipDefaults.assistChipColors(
+                            containerColor = if (radarScaleMiles == 300.0) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface
+                        )
+                    )
+                    AssistChip(
+                        onClick = { radarScaleMiles = 1200.0 },
+                        label = { Text("Continent (1,200 mi)", fontSize = 10.sp) },
+                        colors = AssistChipDefaults.assistChipColors(
+                            containerColor = if (radarScaleMiles == 1200.0) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface
+                        )
+                    )
+                    AssistChip(
+                        onClick = { radarScaleMiles = 8000.0 },
+                        label = { Text("🌍 World (8,000 mi)", fontSize = 10.sp) },
+                        colors = AssistChipDefaults.assistChipColors(
+                            containerColor = if (radarScaleMiles == 8000.0) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface
+                        )
                     )
                 }
 
@@ -197,8 +230,8 @@ fun RadarMapScreen(
                         )
 
                         // Project campsites relative to user
-                        // Range: ~600 miles max map scale
-                        val maxScaleMiles = 600.0
+                        // Range dynamically controlled by scale selector (300 to 8000 miles)
+                        val maxScaleMiles = radarScaleMiles
 
                         pinScreenPositions.clear()
 
@@ -262,7 +295,7 @@ fun RadarMapScreen(
 
                     // Legend & Cardinal Marks
                     Text(
-                        text = "▲ N (High Sierra / Cascades)",
+                        text = "▲ Compass North (Radar Range: ${radarScaleMiles.toInt()} mi)",
                         color = Color(0xFF749688),
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
